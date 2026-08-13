@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Builder session 1 · Spans and traces - learn ai observability with phoebe</title>
+<link rel="stylesheet" href="../assets/style.css?v=2">
+</head>
+<body>
+
+<div class="toolbar">
+  <div class="wrap">
+    <span class="crumb"><a href="../index.html">learn-ai-observability-with-phoebe</a> / Builder session 1 of 10</span>
+    <button class="btn" id="toggle-all" type="button">Expand all</button>
+    <button class="btn primary" id="zoom-toggle" type="button">Projector zoom: off</button>
+  </div>
+</div>
+
+<header class="masthead">
+  <div class="wrap">
+    <div class="eyebrow">Learn AI Observability with Phoebe · Builder track · Session 1 of 10</div>
+    <h1>Spans and traces: <span class="accent">the anatomy of one thing that happened</span></h1>
+    <p class="sub">An eval score is a claim about a population. A trace is a record of one event. This session builds the vocabulary the whole course runs on - span, trace, parent, attribute, status, event - on the smallest possible unit, a single model call, and then shows what happens to that vocabulary the moment the call becomes an agent with tools underneath it. By the end you can read a waterfall and say precisely which part of it you are not being shown.</p>
+    <div class="chip-row">
+      <span class="chip level">🟢 Builder track</span>
+      <span class="chip audience">AI engineers · platform engineers · technical PMs</span>
+      <span class="chip time">45 min</span>
+    </div>
+    <div class="agenda">
+      <span class="a1" style="flex:1">0-3 · Welcome</span>
+      <span class="a2" style="flex:4">3-18 · Span anatomy + the tree</span>
+      <span class="a3" style="flex:5">18-40 · Build-along: trace one call, then the agent</span>
+      <span class="a4" style="flex:1">40-45 · Q&amp;A</span>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <!-- ============ INTRO ============ -->
+  <section class="section" id="intro">
+    <div class="section-kicker">
+      <span class="klabel">Part 0</span>
+      <h2>What this course is, and what it is not</h2>
+    </div>
+    <p class="lede">This is not a course about eval metrics, and it is not a course about platform architecture. Three siblings own those: <a href="https://phoebefu6.github.io/learn-ai-evals-with-phoebe/">Learn Evals</a> owns retrieval and generation metrics, <a href="https://phoebefu6.github.io/learn-agent-launch-with-phoebe/">Agent Launch</a> owns the go/no-go decision, and <a href="https://phoebefu6.github.io/learn-ai-infra-with-phoebe/">AI Infrastructure</a> owns the platform layers underneath. This course owns one thing they all assume and none of them teach: <strong>the trace</strong>.</p>
+    <div class="legend">
+      <span class="pill solid">Live - presented in session</span>
+      <span class="pill light">Self-study - read after class</span>
+      <span class="pill inkpill">Official sources covered</span>
+    </div>
+    <div class="callout win">
+      <strong>★ What you walk out with today</strong>
+      The six words this course runs on and what each one buys you, the difference between a flat log line and a parented span tree, the three questions a trace must answer before it is worth storing, and your first instrumented call - with the attribute keys spelled the way the standard spells them.
+    </div>
+    <div class="callout tip">
+      <strong>One sentence for the whole course</strong>
+      Evals tell you whether it works. Observability tells you what actually happened. Both are necessary and they answer different questions: an eval score is a claim about a distribution you constructed, and a trace is the receipt for one real request that one real person made at 09:14 on a Tuesday.
+    </div>
+  </section>
+
+  <!-- ============ PART 1 ============ -->
+  <section class="section" id="anatomy">
+    <div class="section-kicker">
+      <span class="klabel">Part 1 · the vocabulary</span>
+      <h2>Six words, and what each one is for <span class="tag concept">7 min live</span></h2>
+    </div>
+    <p class="lede">Tracing has a small vocabulary and it is worth being pedantic about, because almost every argument about observability tooling turns out to be two people using one of these words differently.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 480" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Span anatomy: a span has a name, a kind, a start time, a duration, a parent, attributes, a status and events. A trace is the tree of spans sharing one trace id.">
+        <style>
+          .saT { font: 700 12.5px Inter, sans-serif; fill: #FFFFFF; }
+          .saS { font: 400 11px Inter, sans-serif; fill: #AFC0E4; }
+          .saH { font: 700 13px Inter, sans-serif; fill: #1B2230; }
+          .saX { font: 400 11px Inter, sans-serif; fill: #66707E; }
+          .saM { font: 400 11px ui-monospace, Menlo, monospace; fill: #16305C; }
+          .saK { font: 600 12.5px Inter, sans-serif; fill: #08323A; }
+        </style>
+
+        <rect x="24" y="24" width="192" height="52" rx="10" fill="#0C1F3F"/>
+        <text class="saT" x="42" y="46">Span</text>
+        <text class="saS" x="42" y="64">one unit of work</text>
+        <rect x="230" y="24" width="626" height="52" rx="10" fill="#EDF2FB" stroke="#AFC0E4" stroke-width="1.5"/>
+        <text class="saX" x="250" y="46">One operation with a beginning and an end: a model call, a tool call, a database query, a whole</text>
+        <text class="saX" x="250" y="64">agent run. If you can time it and it can fail on its own, it deserves to be a span.</text>
+
+        <rect x="24" y="88" width="192" height="52" rx="10" fill="#16305C"/>
+        <text class="saT" x="42" y="110">Trace</text>
+        <text class="saS" x="42" y="128">one request, end to end</text>
+        <rect x="230" y="88" width="626" height="52" rx="10" fill="#EDF2FB" stroke="#AFC0E4" stroke-width="1.5"/>
+        <text class="saX" x="250" y="110">Every span sharing one trace id, assembled into a tree by their parent ids. The trace is the unit</text>
+        <text class="saX" x="250" y="128">you open when somebody says "this one answer was wrong". It is the receipt.</text>
+
+        <rect x="24" y="152" width="192" height="52" rx="10" fill="#3F62A8"/>
+        <text class="saT" x="42" y="174">Parent</text>
+        <text class="saS" x="42" y="192" fill="#EDF2FB">who called whom</text>
+        <rect x="230" y="152" width="626" height="52" rx="10" fill="#EDF2FB" stroke="#AFC0E4" stroke-width="1.5"/>
+        <text class="saX" x="250" y="174">The one field that turns a pile of log lines into a shape. Without parenting you know six things</text>
+        <text class="saX" x="250" y="192">happened; with it you know the retrieval happened INSIDE the agent's second reasoning step.</text>
+
+        <rect x="24" y="216" width="192" height="52" rx="10" fill="#3F62A8"/>
+        <text class="saT" x="42" y="238">Attributes</text>
+        <text class="saS" x="42" y="256" fill="#EDF2FB">key-value facts</text>
+        <rect x="230" y="216" width="626" height="52" rx="10" fill="#EDF2FB" stroke="#AFC0E4" stroke-width="1.5"/>
+        <text class="saM" x="250" y="238">gen_ai.provider.name · gen_ai.usage.input_tokens · gen_ai.retrieval.documents.count</text>
+        <text class="saX" x="250" y="256">Duration tells you WHERE the problem is. Attributes are the only thing that tells you WHAT it is.</text>
+
+        <rect x="24" y="280" width="192" height="52" rx="10" fill="#0891A6"/>
+        <text class="saT" x="42" y="302">Status</text>
+        <text class="saS" x="42" y="320" fill="#E4F6F9">ok, error, unset</text>
+        <rect x="230" y="280" width="626" height="52" rx="10" fill="#E4F6F9" stroke="#0891A6" stroke-width="1.5"/>
+        <text class="saX" x="250" y="302">The field every dashboard aggregates and almost nobody sets deliberately. A caught exception</text>
+        <text class="saX" x="250" y="320">that does not set status leaves a failing system reporting itself green. Session b6 lives here.</text>
+
+        <rect x="24" y="344" width="192" height="52" rx="10" fill="#0891A6"/>
+        <text class="saT" x="42" y="366">Events</text>
+        <text class="saS" x="42" y="384" fill="#E4F6F9">timestamped notes</text>
+        <rect x="230" y="344" width="626" height="52" rx="10" fill="#E4F6F9" stroke="#0891A6" stroke-width="1.5"/>
+        <text class="saX" x="250" y="366">Things that happened at a moment rather than over an interval: a retry fired, a guardrail tripped,</text>
+        <text class="saX" x="250" y="384">an exception was recorded. Also where message content belongs, if you keep it at all - see b10.</text>
+
+        <rect x="24" y="418" width="832" height="44" rx="10" fill="#FFFFFF" stroke="#C7CFDA" stroke-width="1.5"/>
+        <rect x="42" y="432" width="14" height="14" rx="3" fill="#0891A6"/>
+        <text class="saK" x="66" y="444">Duration localises a problem. Attributes identify it. Status decides whether anyone is told.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - the six words, and the distinct job each one does</figcaption>
+    </figure>
+
+    <details class="card" open>
+      <summary><span class="mode live">Live</span>Why a log line is not enough<span class="mini">4 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>Most teams arrive at AI observability already logging. The logs look adequate right up until the first real incident, and then they fail in a specific way worth naming.</p>
+        <table class="clean">
+          <tr><th></th><th>Log lines</th><th>A parented trace</th></tr>
+          <tr><td><strong>Shape</strong></td><td>A flat sequence, ordered by clock</td><td>A tree, ordered by causation</td></tr>
+          <tr><td><strong>Concurrency</strong></td><td>Interleaved and ambiguous - two parallel tool calls become four confusing lines</td><td>Two sibling spans with overlapping intervals. Unambiguous</td></tr>
+          <tr><td><strong>"Where did the time go?"</strong></td><td>Subtract timestamps by hand, hope nothing is missing</td><td>Read it off the waterfall</td></tr>
+          <tr><td><strong>Nesting</strong></td><td>Inferred from indentation, if someone bothered</td><td>Explicit parent id</td></tr>
+          <tr><td><strong>Under an agent loop</strong></td><td>Collapses. Iteration 3 looks exactly like iteration 1</td><td>Each iteration is its own subtree</td></tr>
+        </table>
+        <p>The honest summary: logs answer "what did the code say", traces answer "what did the system do". For a single-shot model call the gap is narrow enough that logs get you by. For anything with a loop in it, the gap is the whole problem.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode self">Self-study</span>The three questions a trace must answer to be worth storing<span class="mini">3 min read</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>Instrumentation is not free, so it is worth having a test for whether a span is earning its keep. A trace is worth storing when it can answer all three of these about a single request:</p>
+        <ul>
+          <li><strong>Where did the time go?</strong> Every second of wall clock should sit inside some span. If the child spans do not add up to the parent, the missing time is exactly where your next incident will hide.</li>
+          <li><strong>What did each step actually get and return?</strong> Not the full text necessarily - the counts, the ids, the row counts, the document counts. "Retrieval ran" is nearly useless; "retrieval returned zero documents" is the whole diagnosis.</li>
+          <li><strong>Did anything fail, including quietly?</strong> A caught-and-handled failure is still a failure and still belongs in the record. This is the one teams get wrong most often, and it is why a broken system can hold a green dashboard for a week.</li>
+        </ul>
+        <p>If a span cannot contribute to any of those three answers, it is costing you storage and cardinality for nothing. Session b7 puts numbers on that trade.</p>
+      </div>
+    </details>
+  </section>
+
+  <!-- ============ PART 2 ============ -->
+  <section class="section" id="tree">
+    <div class="section-kicker">
+      <span class="klabel">Part 2 · the tree</span>
+      <h2>What happens when one call becomes an agent <span class="tag concept">6 min live</span></h2>
+    </div>
+    <p class="lede">A single model call is a trivially easy thing to observe: one span, two token counts, done. Everything hard about this course arrives when the call gains the ability to decide what to do next.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 400" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="One model call is a single span. An agent run is a tree: an agent span with model, tool and retrieval children, some nested two levels deep.">
+        <style>
+          .trT { font: 700 12px Inter, sans-serif; fill: #FFFFFF; }
+          .trH { font: 700 12.5px Inter, sans-serif; fill: #1B2230; }
+          .trX { font: 400 11px Inter, sans-serif; fill: #66707E; }
+          .trM { font: 400 10.5px ui-monospace, Menlo, monospace; fill: #FFFFFF; }
+          .trK { font: 600 12.5px Inter, sans-serif; fill: #08323A; }
+        </style>
+
+        <text class="trH" x="24" y="38">A single model call - one span, and observability is basically solved</text>
+        <rect x="24" y="52" width="300" height="34" rx="8" fill="#16305C"/>
+        <text class="trM" x="40" y="74">chat claude-sonnet-4-5   1.1s</text>
+
+        <text class="trH" x="24" y="128">An agent run - the same call, now with the right to decide what happens next</text>
+
+        <rect x="24" y="144" width="832" height="30" rx="8" fill="#0C1F3F"/>
+        <text class="trM" x="40" y="164">insight_bot.answer   6.8s   AGENT</text>
+
+        <rect x="48" y="182" width="180" height="28" rx="7" fill="#16305C"/>
+        <text class="trM" x="62" y="201">chat (plan)   1.1s</text>
+
+        <rect x="48" y="218" width="120" height="28" rx="7" fill="#3F62A8"/>
+        <text class="trM" x="62" y="237">tool   0.2s</text>
+
+        <rect x="48" y="254" width="500" height="28" rx="7" fill="#0891A6"/>
+        <text class="trM" x="62" y="273">retrieve_metrics   4.2s   RETRIEVER</text>
+
+        <rect x="72" y="290" width="440" height="26" rx="7" fill="#991B1B"/>
+        <text class="trM" x="86" y="308">db.query   4.1s   returned_rows=0</text>
+
+        <rect x="72" y="324" width="196" height="26" rx="7" fill="#991B1B"/>
+        <text class="trM" x="86" y="342">cache.get   HIT age=19.4h</text>
+
+        <rect x="562" y="254" width="294" height="62" rx="8" fill="#FEF2F2" stroke="#FCA5A5" stroke-width="1.5"/>
+        <text class="trX" x="578" y="274" fill="#991B1B">The two red spans are the incident this</text>
+        <text class="trX" x="578" y="290" fill="#991B1B">whole course chases. Neither of them is</text>
+        <text class="trX" x="578" y="306" fill="#991B1B">an LLM call, and neither raises an error.</text>
+
+        <rect x="24" y="366" width="14" height="14" rx="3" fill="#0891A6"/>
+        <text class="trK" x="48" y="378">The LLM is rarely the broken part. It is just the only part your SDK instrumented for free.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - one span versus a tree, and where the failure actually lives</figcaption>
+    </figure>
+
+    <div class="callout warn">
+      <strong>The asymmetry that defines this course</strong>
+      Auto-instrumentation gives you the model calls, because that is what the vendor SDK wraps. The model calls are also the part least likely to be your bug. Retrieval, caching, tool arguments and swallowed exceptions are where production breaks, and every one of them is something you have to choose to instrument. Coverage is not a technical problem; it is a decision about where you look, made before you know what you are looking for.
+    </div>
+  </section>
+
+  <!-- ============ DEMO 1 ============ -->
+  <section class="section" id="demo-1">
+    <div class="section-kicker">
+      <span class="klabel">Demo 1 of 2</span>
+      <h2>Instrument one call, by hand, once <span class="tag demo">★ 12 min · everyone builds</span></h2>
+    </div>
+    <p class="lede">Do this manually exactly once, so that every auto-instrumentation library you use afterwards is something you understand rather than something you trust. Any language with an OpenTelemetry SDK works; the shape below is Python.</p>
+
+    <div class="steps">
+      <div class="step"><p>Wrap your simplest model call in a span. Name it for the operation, not the function: <code>chat &lt;model&gt;</code> rather than <code>call_llm_v2</code>. Span names become dashboard rows, and a dashboard row named after a function is a dashboard row nobody reads.</p></div>
+      <div class="step"><p>Set the attributes the standard already has names for - model, token counts, finish reason. Session b2 goes through the exact current keys. Use the standard keys even if you are only ever going to look at them yourself: the day you switch tooling, conventional attributes port and bespoke ones do not.</p></div>
+      <div class="step"><p>Now deliberately break it. Raise an exception inside the span, and confirm the span comes back with error status. Then catch the exception, handle it, and watch the span go green while the failure is still real. Sit with that for a second - you have just reproduced the exact mechanism behind the incident this course is built around.</p></div>
+      <div class="step"><p>Add a second span around the whole request, as the parent. Confirm the child's duration sits inside the parent's, and subtract: the difference is your first piece of unaccounted time. Write the number down.</p></div>
+    </div>
+
+    <div class="prompt-box good">
+      <span class="label">★ The shape - the only three lines that matter</span>
+      <p>with tracer.start_as_current_span(f"chat {model}") as span: &nbsp;·&nbsp; span.set_attribute("gen_ai.request.model", model) &nbsp;·&nbsp; span.set_attribute("gen_ai.usage.input_tokens", resp.usage.input_tokens) &nbsp;·&nbsp; and on the failure path, span.set_status(Status(StatusCode.ERROR)) plus span.record_exception(e) - even when you handle the error and carry on.</p>
+    </div>
+
+    <div class="callout tip">
+      <strong>The one habit worth forming today</strong>
+      Every time you write a <code>try / except</code> around anything an AI request depends on, set the span status in the except block before you return your fallback. That single reflex is the difference between the incident in this course taking twenty minutes to find and taking a week.
+    </div>
+  </section>
+
+  <!-- ============ DEMO 2 ============ -->
+  <section class="section" id="demo-2">
+    <div class="section-kicker">
+      <span class="klabel">Demo 2 of 2</span>
+      <h2>Read the trace you will be living in <span class="tag demo">★ 8 min · explore</span></h2>
+    </div>
+    <p class="lede">This is the incident the builder track hunts. Open it now with everything switched off, the way it actually shipped, and just look at the gap. Session b5 does the full hunt; today you only need to feel how innocent a badly instrumented trace looks.</p>
+
+    <div class="tlbox"></div>
+
+    <div class="steps">
+      <div class="step"><p>Before touching a lever, read the red bar under the waterfall. Two thirds of the run is inside no span at all - and nothing on screen looks wrong. This is what your on-call engineer saw.</p></div>
+      <div class="step"><p>Switch on <strong>Tool spans</strong> alone. Notice how little it helps. Tools are the easy thing to instrument and they were never where the time went - a very common way to feel productive without getting closer to the bug.</p></div>
+      <div class="step"><p>Now switch on <strong>Retriever spans</strong>. The gap closes to zero and a 4.2 second step appears out of nowhere. You have not changed the system at all; you have changed only what it reports about itself.</p></div>
+      <div class="step"><p>Leave it there for today. The remaining levers, and the five questions a complete diagnosis has to answer, are session b5.</p></div>
+    </div>
+  </section>
+
+  <!-- ============ HOMEWORK ============ -->
+  <section class="section" id="exercise">
+    <div class="section-kicker">
+      <span class="klabel">Homework</span>
+      <h2>Try it yourself - this week <span class="tag exercise">◐ 40-50 min total</span></h2>
+    </div>
+    <ul>
+      <li>Take one real AI request in your own system and account for its wall clock. Add up every span you currently emit and subtract from the total. The unaccounted percentage is the single most useful number you will produce this week, and for most teams it is above fifty.</li>
+      <li>Find every <code>try / except</code> in the path of an AI request and count how many set span status on the failure path. If the answer is zero, you cannot currently distinguish "worked" from "failed quietly", and neither can your dashboard.</li>
+      <li>Write down the three questions from Part 1 and check them against a trace you already store. Any question you cannot answer is a coverage gap with a name, which makes it a ticket rather than a vague unease.</li>
+      <li>Draw your own version of the Part 2 tree for one of your agents, from memory, then compare it against a real trace. The difference between the tree you think you have and the tree you actually emit is worth seeing before an incident shows it to you.</li>
+    </ul>
+  </section>
+
+  <!-- ============ SOURCES ============ -->
+  <section class="section" id="official">
+    <div class="section-kicker">
+      <span class="klabel">Source material</span>
+      <h2>Official sources covered</h2>
+    </div>
+    <p class="lede">Every convention and claim on this page traces to a primary source - the OpenTelemetry specification and its GenAI semantic conventions - catalogued in this course's source map. This page covers:</p>
+    <div class="covered">
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Span, trace, parent, attribute, status, event - the OpenTelemetry tracing data model</span><span class="note">Part 1 · the vocabulary the rest of the course assumes</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Manual instrumentation: starting a span, setting attributes, recording an exception, setting status</span><span class="note">Demo 1 · done by hand once, on purpose</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Agent-run span structure: parent agent span with model, tool and retrieval children</span><span class="note">Part 2 · framework auto-instrumentation in b3</span></div>
+      <div class="covered-row"><span class="status pill light">◐</span><span class="name">The exact current GenAI attribute keys, with required and recommended status</span><span class="note">Used loosely here · spelled out properly in b2</span></div>
+      <div class="covered-row"><span class="status pill light">◐</span><span class="name">Message-content capture and where it belongs in the data model</span><span class="note">Named here · the privacy and cost decision is b10</span></div>
+      <div class="covered-row"><span class="status pill light">◐</span><span class="name">Metrics and logs as the other two signals</span><span class="note">Not covered by design · this course is trace-first, and b8 adds the metrics you alert on</span></div>
+    </div>
+  </section>
+
+  <!-- ============ QUIZ ============ -->
+  <section class="section" id="quiz">
+    <div class="section-kicker">
+      <span class="klabel">Check yourself</span>
+      <h2>Three questions before you go 🎯 <span class="tag exercise">◐ 90 seconds</span></h2>
+    </div>
+    <div class="quiz-q" data-answer="2">
+      <p class="qtext">1 · Your child spans add up to 2.2 seconds and the parent span says 6.8 seconds. What have you learned?</p>
+      <button class="qopt" type="button">A · The parent span is measuring incorrectly and should be fixed</button>
+      <button class="qopt" type="button">B · Nothing much - parent and child durations do not need to reconcile</button>
+      <button class="qopt" type="button">C · That 4.6 seconds of real work is happening inside no span you emit, and that gap is where your next incident will hide</button>
+      <p class="qwhy">Unaccounted time is the most actionable number in a trace. The parent is measuring exactly right - it is measuring work you have chosen not to describe. Every serious AI incident in this course lives in that gap, because a step you do not instrument cannot appear slow, cannot appear empty and cannot appear failed.</p>
+    </div>
+    <div class="quiz-q" data-answer="0">
+      <p class="qtext">2 · Which part of an agent run does vendor SDK auto-instrumentation reliably give you, and why is that awkward?</p>
+      <button class="qopt" type="button">A · The model calls - which are the part least likely to be your bug, while retrieval, caching, tool arguments and swallowed exceptions all need a deliberate decision to instrument</button>
+      <button class="qopt" type="button">B · The retrieval steps, because retrieval is what the SDK wraps</button>
+      <button class="qopt" type="button">C · All of it, which is why manual instrumentation is obsolete</button>
+      <p class="qwhy">Auto-instrumentation wraps what the vendor ships, and the vendor ships the model client. That is genuinely useful and it is also the layer that fails least often. The failures that reach your users tend to sit in the glue - an empty retrieval, a stale cache, a tool called with the wrong argument - and none of that appears unless someone decided it should.</p>
+    </div>
+    <div class="quiz-q" data-answer="1">
+      <p class="qtext">3 · You catch an exception, fall back to cached data, and return a successful response. What must happen to the span?</p>
+      <button class="qopt" type="button">A · Nothing - the request succeeded from the user's point of view, so green is correct</button>
+      <button class="qopt" type="button">B · Set error status and record the exception anyway, because a handled failure is still a failure and it is the only signal that the fallback path ran</button>
+      <button class="qopt" type="button">C · Delete the span, since it did not contribute to the final answer</button>
+      <p class="qwhy">This is the mechanism behind the incident the whole course chases. The user got a response, so nothing looks wrong, and the fallback quietly served nineteen-hour-old data. If the caught exception never becomes a span status or a recorded event, your monitoring is structurally incapable of telling you the difference between working and degraded - and it will hold a green dashboard through an entire incident.</p>
+    </div>
+    <p class="quiz-score"></p>
+  </section>
+
+  <!-- ============ CHEAT SHEET ============ -->
+  <section class="cheat" id="cheatsheet">
+    <h3>Builder session 1 cheat sheet <span>· pin this</span></h3>
+    <div class="grid-2">
+      <div class="cheat-item"><b>Span</b><span>One timed unit of work that can fail on its own. If you can time it and it can break, it earns a span.</span></div>
+      <div class="cheat-item"><b>Trace</b><span>All spans sharing a trace id, assembled by parent id. The receipt for one real request.</span></div>
+      <div class="cheat-item"><b>The division of labour</b><span>Duration localises the problem. Attributes identify it. Status decides whether anyone is told.</span></div>
+      <div class="cheat-item"><b>Unaccounted time</b><span>Parent duration minus the sum of children. The single most useful number you can compute today.</span></div>
+      <div class="cheat-item"><b>Logs vs traces</b><span>Logs say what the code said. Traces say what the system did. The gap becomes the whole problem once there is a loop.</span></div>
+      <div class="cheat-item"><b>The auto-instrumentation asymmetry</b><span>You get the model calls free. The model calls are rarely the bug.</span></div>
+      <div class="cheat-item"><b>The try/except reflex</b><span>Set span status in the except block before returning the fallback. Every time. This is the habit.</span></div>
+      <div class="cheat-item"><b>Three questions</b><span>Where did the time go? What did each step get and return? Did anything fail, including quietly?</span></div>
+    </div>
+  </section>
+
+  <footer class="pagefoot">
+    <span>Builder session 1 of 10 · learn-ai-observability-with-phoebe · by Phoebe Fu &nbsp;·&nbsp; 📚 <a href="https://phoebefu6.github.io/learn-with-phoebe/">Learn with Phoebe ↗</a></span>
+    <span><a href="../index.html">← Course home</a> &nbsp;·&nbsp; <a href="b2-otel-genai-conventions.html">Next: OTel GenAI conventions →</a></span>
+  </footer>
+
+</main>
+
+<script src="../assets/trace-live.js?v=2"></script>
+<script src="../assets/app.js?v=2"></script>
+</body>
+</html>

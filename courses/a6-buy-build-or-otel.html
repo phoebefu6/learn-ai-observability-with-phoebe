@@ -1,0 +1,548 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Leader session 6 · Buy, build, or stay OTel-native - learn ai observability with phoebe</title>
+<link rel="stylesheet" href="../assets/style.css?v=2">
+</head>
+<body>
+
+<div class="toolbar">
+  <div class="wrap">
+    <span class="crumb"><a href="../index.html">learn-ai-observability-with-phoebe</a> / Leader session 6 of 6</span>
+    <button class="btn" id="toggle-all" type="button">Expand all</button>
+    <button class="btn primary" id="zoom-toggle" type="button">Projector zoom: off</button>
+  </div>
+</div>
+
+<header class="masthead">
+  <div class="wrap">
+    <div class="eyebrow">Learn AI Observability with Phoebe · Leader track · Session 6 of 6</div>
+    <h1>Buy, build, or stay OTel-native: <span class="accent">lock-in is an attribute-dialect problem</span></h1>
+    <p class="sub">The last session, and the one where the previous five turn into a purchase order. The tooling question is usually framed as buy versus build, which is the wrong axis: the market splits three ways, everybody emits the same wire format, and the thing that actually locks you in is the spelling of your attribute keys. Underneath the tooling decision sits a governance decision that the default settings will make for you if you do not make it first, which is whether your trace store becomes a copy of everything your users typed.</p>
+    <div class="chip-row">
+      <span class="chip level">🟠 Leader track</span>
+      <span class="chip audience">Heads of engineering · platform leads · SRE managers</span>
+      <span class="chip time">45 min</span>
+    </div>
+    <div class="agenda">
+      <span class="a1" style="flex:1">0-3 · Welcome</span>
+      <span class="a2" style="flex:4">3-17 · The market splits three ways</span>
+      <span class="a3" style="flex:4">17-31 · Dialects, and the inverted default</span>
+      <span class="a4" style="flex:3">31-42 · The portability ledger</span>
+      <span class="a1" style="flex:1">42-45 · Close</span>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <!-- ============ INTRO ============ -->
+  <section class="section" id="intro">
+    <div class="section-kicker">
+      <span class="klabel">Part 0</span>
+      <h2>Why this is the last session and not the first</h2>
+    </div>
+    <p class="lede">Most teams start here, with a vendor bake-off, and it is the wrong end of the problem. A platform can only show you what you chose to emit, so a tooling decision taken before a coverage decision buys you a beautiful view of the wrong half of your system. Five sessions of deciding what matters is what makes this session short.</p>
+    <div class="legend">
+      <span class="pill solid">Live - presented in session</span>
+      <span class="pill light">Self-study - read after class</span>
+      <span class="pill inkpill">Official sources covered</span>
+    </div>
+    <div class="callout win">
+      <strong>★ What you walk out with today</strong>
+      The three-way split of the market and which lane each candidate actually sits in, the licence facts stated honestly rather than as a badge, why interop happens at the backend and not at the producer, the inverted default privacy posture that decides what lands in your trace store on day one, a portability ledger that separates what ports from what you will rebuild, and an explicit list of what could not be verified so you ask the vendor rather than guess.
+    </div>
+    <div class="callout tip">
+      <strong>One sentence for this session</strong>
+      Evals tell you whether it works. Observability tells you what actually happened. Whichever platform you pick will happily receive what you send it, so the durable asset is your instrumentation, spelled in conventional attribute names, and everything you build on top of it is rented.
+    </div>
+  </section>
+
+  <!-- ============ PART 1 ============ -->
+  <section class="section" id="three-lanes">
+    <div class="section-kicker">
+      <span class="klabel">Part 1 · the landscape</span>
+      <h2>The market splits three ways, not two <span class="tag concept">14 min live</span></h2>
+    </div>
+    <p class="lede">Buy versus build implies two options. In practice there are three lanes, and most bake-offs go wrong by comparing candidates from different lanes on the same criteria. Decide the lane first, then compare inside it.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 420" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Three lanes: OTLP-native LLM-specific platforms, OTLP-native general APM, and proprietary SDK platforms, with what each one trades away, plus the licence facts.">
+        <style>
+          .laT { font: 700 12.5px Inter, sans-serif; fill: #FFFFFF; }
+          .laS { font: 400 11px Inter, sans-serif; fill: #AFC0E4; }
+          .laN { font: 700 11.5px Inter, sans-serif; fill: #0C1F3F; }
+          .laX { font: 400 11px Inter, sans-serif; fill: #66707E; }
+          .laD { font: 700 11px Inter, sans-serif; fill: #16305C; }
+          .laH { font: 700 12.5px Inter, sans-serif; fill: #08323A; }
+          .laW { font: 400 11px Inter, sans-serif; fill: #08323A; }
+          .laK { font: 600 12.5px Inter, sans-serif; fill: #08323A; }
+        </style>
+
+        <rect x="24" y="24" width="270" height="250" rx="10" fill="#FFFFFF" stroke="#C7CFDA" stroke-width="1.5"/>
+        <rect x="24" y="24" width="270" height="52" rx="10" fill="#16305C"/>
+        <rect x="24" y="64" width="270" height="12" fill="#16305C"/>
+        <text class="laT" x="42" y="46">OTLP-native, LLM-specific</text>
+        <text class="laS" x="42" y="64">the specialist lane</text>
+        <text class="laN" x="42" y="100">Langfuse · Phoenix · Braintrust</text>
+        <text class="laN" x="42" y="116">Weave · LangSmith via receiver</text>
+        <text class="laX" x="42" y="142">Reads gen_ai.* and OpenInference</text>
+        <text class="laX" x="42" y="157">keys, then renders an agent run</text>
+        <text class="laX" x="42" y="172">natively: the tree, the tool calls,</text>
+        <text class="laX" x="42" y="187">the tokens, the cost per step.</text>
+        <text class="laD" x="42" y="215">You trade</text>
+        <text class="laX" x="42" y="234">a smaller vendor, and a product</text>
+        <text class="laX" x="42" y="249">still moving fast underneath you.</text>
+
+        <rect x="305" y="24" width="270" height="250" rx="10" fill="#FFFFFF" stroke="#C7CFDA" stroke-width="1.5"/>
+        <rect x="305" y="24" width="270" height="52" rx="10" fill="#3F62A8"/>
+        <rect x="305" y="64" width="270" height="12" fill="#3F62A8"/>
+        <text class="laT" x="323" y="46">OTLP-native, general APM</text>
+        <text class="laS" x="323" y="64" fill="#EDF2FB">the generalist lane</text>
+        <text class="laN" x="323" y="100">Grafana Cloud / Tempo</text>
+        <text class="laN" x="323" y="116">Honeycomb</text>
+        <text class="laX" x="323" y="142">Ingests anything OTLP, including</text>
+        <text class="laX" x="323" y="157">every gen_ai.* attribute you send.</text>
+        <text class="laX" x="323" y="172">No LLM-aware rendering unless</text>
+        <text class="laX" x="323" y="187">you go and build the views.</text>
+        <text class="laD" x="323" y="215">You trade</text>
+        <text class="laX" x="323" y="234">the native agent view, for one</text>
+        <text class="laX" x="323" y="249">home for all your telemetry.</text>
+
+        <rect x="586" y="24" width="270" height="250" rx="10" fill="#FFFFFF" stroke="#C7CFDA" stroke-width="1.5"/>
+        <rect x="586" y="24" width="270" height="52" rx="10" fill="#0C1F3F"/>
+        <rect x="586" y="64" width="270" height="12" fill="#0C1F3F"/>
+        <text class="laT" x="604" y="46">Proprietary SDK</text>
+        <text class="laS" x="604" y="64">the richest-product lane</text>
+        <text class="laN" x="604" y="100">Datadog LLM Observability</text>
+        <text class="laX" x="604" y="142">Deepest product and the widest</text>
+        <text class="laX" x="604" y="157">platform around it. No documented</text>
+        <text class="laX" x="604" y="172">OTLP path for LLM Observability</text>
+        <text class="laX" x="604" y="187">specifically. Billed per span.</text>
+        <text class="laD" x="604" y="215">You trade</text>
+        <text class="laX" x="604" y="234">portability. Your producer code</text>
+        <text class="laX" x="604" y="249">becomes the vendor's SDK.</text>
+
+        <rect x="24" y="294" width="832" height="78" rx="10" fill="#E4F6F9" stroke="#0891A6" stroke-width="1.5"/>
+        <text class="laH" x="44" y="316">Licence, stated honestly - neither popular self-hosted option is plain permissive OSS end to end</text>
+        <text class="laW" x="44" y="336">Arize Phoenix is Elastic License 2.0. Langfuse is MIT except ee/, web/src/ee/ and worker/src/ee/. The W&amp;B</text>
+        <text class="laW" x="44" y="352">Weave repo is Apache-2.0. Read the licence covering the part you intend to run, not the README badge.</text>
+
+        <rect x="24" y="390" width="14" height="14" rx="3" fill="#0891A6"/>
+        <text class="laK" x="48" y="402">Compare candidates inside a lane. Comparing across lanes is how a bake-off produces a bad answer.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - the three lanes, what each one asks you to give up, and the licence facts</figcaption>
+    </figure>
+
+    <details class="card" open>
+      <summary><span class="mode live">Live</span>The candidate table, with the ingest facts that actually decide things<span class="mini">6 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>The columns worth arguing about are ingest and self-host, because those two are what determine whether a switch later is a configuration change or a project. Everything else is product taste, which changes faster than your instrumentation does.</p>
+        <table class="clean">
+          <tr><th>Platform</th><th>Ingest</th><th>Self-host</th><th>Licence</th></tr>
+          <tr><td><strong>Langfuse</strong></td><td>OTLP-native. HTTP JSON and protobuf, <strong>no gRPC</strong>, Basic auth. Reads three dialects</td><td>Yes</td><td>MIT <strong>except</strong> <code>ee/</code>, <code>web/src/ee/</code>, <code>worker/src/ee/</code></td></tr>
+          <tr><td><strong>Arize Phoenix</strong></td><td>OTLP-native, OpenInference dialect</td><td>Yes, described as free to self-host with no feature limitations</td><td><strong>Elastic License 2.0</strong>, not plain OSS</td></tr>
+          <tr><td><strong>LangSmith</strong></td><td>Proprietary SDK plus an OTLP receiver</td><td>Enterprise tier</td><td>Proprietary</td></tr>
+          <tr><td><strong>Braintrust</strong></td><td>OTLP-native, needs a parent-project header</td><td><strong>Not verified.</strong> Ask</td><td>Proprietary</td></tr>
+          <tr><td><strong>W&amp;B Weave</strong></td><td>OTLP-native, project name carried as an OTel resource attribute</td><td>Dedicated and self-managed offerings</td><td>Repo is Apache-2.0</td></tr>
+          <tr><td><strong>Datadog LLM Obs</strong></td><td><strong>Proprietary SDK only.</strong> No documented OTLP path for LLM Observability</td><td>No</td><td>Proprietary. Billing based on the volume of spans you send</td></tr>
+          <tr><td><strong>Grafana Cloud / Tempo</strong></td><td>OTLP-native, generic. AI dashboards exist over conventional keys</td><td>Tempo is open source</td><td><strong>Licence string not verified.</strong> Check the repo</td></tr>
+          <tr><td><strong>Honeycomb</strong></td><td>OTLP-native, generic</td><td>No</td><td>Proprietary. <strong>LLM feature set not verified</strong></td></tr>
+        </table>
+        <p>Two things to notice before the room starts arguing about features. First, seven of the eight take OTLP, which means the wire is not the differentiator and portability is not really at stake at the transport layer. Second, the one that does not is also the one with the richest product, which is not a coincidence and is exactly the trade being offered.</p>
+      </div>
+    </details>
+
+    <div class="callout warn">
+      <strong>The question that separates the lanes in one minute</strong>
+      Ask any candidate to show you a live trace of a twelve-step agent run with a failed tool call in the middle, using data you sent from your own code rather than their demo account. Lane one renders it as a tree without configuration. Lane two ingests every attribute perfectly and shows you a flat waterfall you will need to build views over. Lane three renders it beautifully and you write to their SDK to get it there. All three answers are acceptable. Not knowing which one you are buying is not.
+    </div>
+  </section>
+
+  <!-- ============ PART 2 ============ -->
+  <section class="section" id="dialects">
+    <div class="section-kicker">
+      <span class="klabel">Part 2 · dialects and defaults</span>
+      <h2>Interop happens at the backend, and the default is inverted <span class="tag concept">14 min live</span></h2>
+    </div>
+    <p class="lede">Lock-in feels like a transport problem and it is not, because everybody speaks the same transport. It is a vocabulary problem. Two libraries can send a token count over identical wire in two different spellings, and the platform on the far end is what reconciles them.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 390" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Three producers emitting different attribute dialects over one OTLP wire into a backend that normalises them, and the inverted content-capture defaults of OTel GenAI versus OpenInference.">
+        <style>
+          .diT { font: 700 12px Inter, sans-serif; fill: #FFFFFF; }
+          .diM { font: 400 10.5px ui-monospace, Menlo, monospace; fill: #AFC0E4; }
+          .diH { font: 700 13px Inter, sans-serif; fill: #1B2230; }
+          .diB { font: 700 12.5px Inter, sans-serif; fill: #16305C; }
+          .diX { font: 400 11px Inter, sans-serif; fill: #66707E; }
+          .diC { font: 700 12px Inter, sans-serif; fill: #08323A; }
+          .diW { font: 400 11px Inter, sans-serif; fill: #08323A; }
+          .diK { font: 600 12.5px Inter, sans-serif; fill: #08323A; }
+        </style>
+
+        <text class="diH" x="24" y="36">Interop happens at the backend, not at the producer</text>
+
+        <rect x="24" y="52" width="220" height="40" rx="8" fill="#3F62A8"/>
+        <text class="diT" x="40" y="72">OpenInference</text>
+        <text class="diM" x="40" y="86">llm.token_count.prompt</text>
+
+        <rect x="24" y="100" width="220" height="40" rx="8" fill="#16305C"/>
+        <text class="diT" x="40" y="120">OTel GenAI</text>
+        <text class="diM" x="40" y="134">gen_ai.usage.input_tokens</text>
+
+        <rect x="24" y="148" width="220" height="40" rx="8" fill="#0C1F3F"/>
+        <text class="diT" x="40" y="168">MLflow tracing</text>
+        <text class="diM" x="40" y="182">mlflow.spanInputs</text>
+
+        <path d="M244 72 H272 V120 H286" fill="none" stroke="#66707E" stroke-width="1.5"/>
+        <path d="M244 120 H286" fill="none" stroke="#66707E" stroke-width="1.5"/>
+        <path d="M244 168 H272 V120" fill="none" stroke="#66707E" stroke-width="1.5"/>
+
+        <rect x="290" y="52" width="90" height="136" rx="8" fill="#E4F6F9" stroke="#0891A6" stroke-width="1.5"/>
+        <text class="diC" x="312" y="112">OTLP</text>
+        <text class="diW" x="308" y="130">one wire</text>
+
+        <path d="M380 120 H400" fill="none" stroke="#66707E" stroke-width="1.5"/>
+        <path d="M400 116 L408 120 L400 124 Z" fill="#66707E"/>
+
+        <rect x="412" y="52" width="444" height="136" rx="8" fill="#EDF2FB" stroke="#AFC0E4" stroke-width="1.5"/>
+        <text class="diB" x="432" y="78">The platform normalises whichever dialect arrives</text>
+        <text class="diX" x="432" y="100">Langfuse documents reading OpenInference keys, OTel GenAI</text>
+        <text class="diX" x="432" y="116">keys and MLflow keys. Three dialects, one backend.</text>
+        <text class="diX" x="432" y="140">So what ports is your attribute NAMES. Emit conventional</text>
+        <text class="diX" x="432" y="156">names and a backend swap is configuration. Emit your own</text>
+        <text class="diX" x="432" y="172">names and it becomes a re-instrumentation project.</text>
+
+        <text class="diH" x="24" y="214">The default privacy posture is inverted - a governance decision wearing a tooling costume</text>
+
+        <rect x="24" y="230" width="410" height="110" rx="10" fill="#E4F6F9" stroke="#0891A6" stroke-width="1.5"/>
+        <text class="diC" x="44" y="252">OTel GenAI conventions</text>
+        <text class="diW" x="44" y="272">Content capture is OPT-IN and OFF by default.</text>
+        <text class="diW" x="44" y="288">The spec: instrumentations "SHOULD NOT capture</text>
+        <text class="diW" x="44" y="304">them by default, but SHOULD provide an option</text>
+        <text class="diW" x="44" y="320">for users to opt in." You choose to record.</text>
+
+        <rect x="446" y="230" width="410" height="110" rx="10" fill="#EDF2FB" stroke="#3F62A8" stroke-width="1.5"/>
+        <text class="diB" x="466" y="252">OpenInference</text>
+        <text class="diX" x="466" y="272">Captures content BY DEFAULT. You hide it with</text>
+        <text class="diX" x="466" y="288">the OPENINFERENCE_HIDE_* flags, and redaction</text>
+        <text class="diX" x="466" y="304">writes the literal "__REDACTED__" in place of</text>
+        <text class="diX" x="466" y="320">the value. Default state: prompts on disk.</text>
+
+        <rect x="24" y="358" width="14" height="14" rx="3" fill="#0891A6"/>
+        <text class="diK" x="48" y="370">Same wire format, opposite defaults. The library you install decides what lands in your trace store.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - three dialects over one wire, and the two libraries whose defaults point in opposite directions</figcaption>
+    </figure>
+
+    <div class="callout example">
+      <span class="ex-pill">Read this paragraph twice, it is the whole session</span>
+      <p>Both dialects emit valid OTLP. Every OpenInference trace is a valid OTLP trace, so nothing about the transport constrains you. But <strong>OTel GenAI treats prompt and completion content as opt-in and ships it off</strong>, while <strong>OpenInference captures content by default and expects you to switch it off</strong>. Nobody presents this as a policy question. It arrives as a library choice made by an engineer in an afternoon, and it decides whether your trace store contains every prompt your users typed. That is a governance decision disguised as a tooling decision, and it is the one place in this session where the default will make the call for you.</p>
+    </div>
+
+    <details class="card">
+      <summary><span class="mode self">Self-study</span>The dialect differences that matter to a leader, not to a spec reader<span class="mini">4 min read</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>You do not need to memorise the key names. You do need to know which capabilities exist in which vocabulary, because a missing concept is a gap you will end up filling with bespoke attributes, and bespoke attributes are the thing that does not port.</p>
+        <table class="clean">
+          <tr><th></th><th>OTel GenAI conventions</th><th>OpenInference</th></tr>
+          <tr><td><strong>Content default</strong></td><td><strong>Opt-in, off.</strong> Metadata only until you decide otherwise</td><td><strong>On by default</strong>, hidden with explicit flags</td></tr>
+          <tr><td><strong>Cost</strong></td><td>Not in the spec. You compute it yourself</td><td>First-class cost fields, including cache read and cache write</td></tr>
+          <tr><td><strong>User identity</strong></td><td><strong>No user id at all.</strong> The general namespace has a session id</td><td>Has a user id field</td></tr>
+          <tr><td><strong>Graph topology</strong></td><td>Not modelled</td><td>Node, name and parent fields for graph frameworks</td></tr>
+          <tr><td><strong>Stability</strong></td><td>Development status, <strong>no tagged releases and nothing to pin</strong></td><td>Versioned and used in production</td></tr>
+        </table>
+        <p>Two consequences for the buying decision. Cost and user attribution are the two things leaders ask for most, and in the conventional vocabulary <strong>neither exists</strong>, so somebody on your team will invent a spelling for them. Decide that spelling once, deliberately, at the application boundary, and write it down. That single act is the difference between a portable instrumentation layer and one that turns a platform migration into a rewrite.</p>
+        <p>Second, and worth saying plainly to anyone quoting a blog post: the conventional vocabulary is still moving. Every span, metric and attribute in it carries development status, the repository has no tags and no releases, and the key that most 2024 material uses for the provider name has already been deprecated. Teach it as a moving target and check the source rather than the documentation, which lags.</p>
+      </div>
+    </details>
+  </section>
+
+  <!-- ============ PART 3 ============ -->
+  <section class="section" id="ledger">
+    <div class="section-kicker">
+      <span class="klabel">Part 3 · the decision</span>
+      <h2>What ports, what you rebuild, and what you store <span class="tag concept">11 min live</span></h2>
+    </div>
+    <p class="lede">Frame the buy-versus-build question as a ledger rather than a preference, and it stops being an argument about taste. Two columns, and one decision underneath them that costs more than either.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 545" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="A portability ledger separating instrumentation that ports from dashboards and alerts that do not, three content-retention postures, and Anthropic's two published positions.">
+        <style>
+          .peT { font: 700 12.5px Inter, sans-serif; fill: #FFFFFF; }
+          .peS { font: 400 11px Inter, sans-serif; fill: #E4F6F9; }
+          .peH { font: 700 13px Inter, sans-serif; fill: #1B2230; }
+          .peX { font: 400 11px Inter, sans-serif; fill: #66707E; }
+          .peD { font: 700 11.5px Inter, sans-serif; fill: #16305C; }
+          .peC { font: 700 12px Inter, sans-serif; fill: #08323A; }
+          .peW { font: 400 11px Inter, sans-serif; fill: #08323A; }
+          .peR { font: 400 11px Inter, sans-serif; fill: #991B1B; }
+          .peRB { font: 700 12px Inter, sans-serif; fill: #991B1B; }
+          .peK { font: 600 12.5px Inter, sans-serif; fill: #08323A; }
+        </style>
+
+        <text class="peH" x="24" y="36">The buy-versus-build question, answered as a portability ledger</text>
+
+        <rect x="24" y="52" width="410" height="160" rx="10" fill="#FFFFFF" stroke="#C7CFDA" stroke-width="1.5"/>
+        <rect x="24" y="52" width="410" height="44" rx="10" fill="#0891A6"/>
+        <rect x="24" y="84" width="410" height="12" fill="#0891A6"/>
+        <text class="peT" x="44" y="74">Ports with you</text>
+        <text class="peS" x="180" y="74">if the names are conventional</text>
+        <text class="peX" x="44" y="118">Your instrumentation, provided the attribute keys</text>
+        <text class="peX" x="44" y="134">are conventional ones rather than yours.</text>
+        <text class="peX" x="44" y="156">The exporter config. One endpoint, one header.</text>
+        <text class="peX" x="44" y="178">The traces already in flight, unchanged.</text>
+        <text class="peD" x="44" y="200">Price of portability: naming discipline.</text>
+
+        <rect x="446" y="52" width="410" height="160" rx="10" fill="#FFFFFF" stroke="#C7CFDA" stroke-width="1.5"/>
+        <rect x="446" y="52" width="410" height="44" rx="10" fill="#16305C"/>
+        <rect x="446" y="84" width="410" height="12" fill="#16305C"/>
+        <text class="peT" x="466" y="74">Does not port</text>
+        <text class="peS" x="590" y="74" fill="#AFC0E4">budget to rebuild all of it</text>
+        <text class="peX" x="466" y="118">Your dashboards. Your saved queries. Your alert</text>
+        <text class="peX" x="466" y="134">rules and every threshold in them.</text>
+        <text class="peX" x="466" y="156">Runbook links, and the team's muscle memory.</text>
+        <text class="peX" x="466" y="178">Anything built on a vendor-specific field.</text>
+        <text class="peD" x="466" y="200">Price of a switch: rebuilding all of it.</text>
+
+        <text class="peH" x="24" y="248">The decision inside the tooling decision: do you store the prompts?</text>
+
+        <rect x="24" y="264" width="270" height="118" rx="10" fill="#EDF2FB" stroke="#AFC0E4" stroke-width="1.5"/>
+        <text class="peD" x="42" y="286">Metadata-rich, content-poor</text>
+        <text class="peX" x="42" y="306">Model names, token counts,</text>
+        <text class="peX" x="42" y="321">durations, status, retrieved</text>
+        <text class="peX" x="42" y="336">doc IDs and scores. 100% of</text>
+        <text class="peX" x="42" y="351">traffic. Cheap and defensible.</text>
+        <text class="peX" x="42" y="366">Cannot always explain WHY.</text>
+
+        <rect x="305" y="264" width="270" height="118" rx="10" fill="#E4F6F9" stroke="#0891A6" stroke-width="1.5"/>
+        <text class="peC" x="323" y="286">Content, sampled</text>
+        <text class="peW" x="323" y="306">Full prompts and outputs on a</text>
+        <text class="peW" x="323" y="321">small, consented, short-TTL</text>
+        <text class="peW" x="323" y="336">sample, in a separate store</text>
+        <text class="peW" x="323" y="351">with tighter access and an</text>
+        <text class="peW" x="323" y="366">audit log. The debug lever.</text>
+
+        <rect x="586" y="264" width="270" height="118" rx="10" fill="#FEF2F2" stroke="#FCA5A5" stroke-width="1.5"/>
+        <text class="peRB" x="604" y="286">Content, all of it, forever</text>
+        <text class="peR" x="604" y="306">The default nobody chose. The</text>
+        <text class="peR" x="604" y="321">trace store becomes a copy of</text>
+        <text class="peR" x="604" y="336">every prompt your users typed,</text>
+        <text class="peR" x="604" y="351">in third-party SaaS, with broad</text>
+        <text class="peR" x="604" y="366">internal read access.</text>
+
+        <rect x="24" y="400" width="832" height="96" rx="10" fill="#E4F6F9" stroke="#0891A6" stroke-width="1.5"/>
+        <text class="peC" x="44" y="422">A vendor's own two published positions are exactly this split, and both are true at once</text>
+        <text class="peW" x="44" y="442">They monitor "agent decision patterns and interaction structures ... all without monitoring the contents of</text>
+        <text class="peW" x="44" y="458">individual conversations." And their own postmortem admits privacy controls "prevent engineers from</text>
+        <text class="peW" x="44" y="474">examining the problematic interactions needed to identify or reproduce bugs." Not a contradiction. A cost.</text>
+
+        <rect x="24" y="514" width="14" height="14" rx="3" fill="#0891A6"/>
+        <text class="peK" x="48" y="526">The resolution is not a compromise, it is a split: metadata at 100%, content on a brief sample.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - the portability ledger, three content postures, and the honest cost of the safe one</figcaption>
+    </figure>
+
+    <details class="card" open>
+      <summary><span class="mode live">Live</span>Retention cost, and why the invoice arrives before the value does<span class="mini">5 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>Retention is the line item that surprises people, because content capture does not raise your bill by a percentage. It raises it by a multiple, and it does so silently, since nobody reviews a telemetry volume the way they review a model bill.</p>
+        <p>The builder track puts a modelled number on this: on the course's constructed incident, turning on full content capture takes retention from roughly 4.6 GB to 48.1 GB for the same traffic, a factor of about ten, <strong>and the diagnosis score does not improve at all</strong> because the message content was never the problem. That arithmetic is modelled rather than measured, and it is labelled as modelled on screen, so substitute your own storage price before quoting it. The shape of the finding is the durable part: content is most of the bytes and rarely the answer.</p>
+        <table class="clean">
+          <tr><th>Question to answer before you sign</th><th>Why it decides the contract</th></tr>
+          <tr><td>What is the billing unit, and is it spans, events, ingested bytes or retained bytes?</td><td>Datadog LLM Observability states billing is based on the volume of spans you send. <strong>Dollar pricing for the other platforms could not be verified</strong> and has to come from the vendor in writing</td></tr>
+          <tr><td>Does content capture change the unit, or only the volume?</td><td>If you are billed on spans, a tenfold content increase may cost nothing extra to ingest and everything to retain. Those are two different lines</td></tr>
+          <tr><td>What is the default retention, and what does a longer tier cost?</td><td>An unbounded retention default is a compliance problem by construction, not merely a cost problem</td></tr>
+          <tr><td>Can you delete one individual's spans on request?</td><td>If you cannot, you cannot service an erasure request, and the trace store becomes the reason a data subject request fails</td></tr>
+          <tr><td>Who inside your company can read a prompt today?</td><td>Trace stores usually have broad internal read access. They deserve the controls you give a production database, and most do not have them</td></tr>
+          <tr><td>Where does the data physically go?</td><td>Content reaching a vendor endpoint is a transfer and a processor relationship. Scrub before ingestion, because after ingestion deletion is a request rather than a fact</td></tr>
+        </table>
+      </div>
+    </details>
+
+    <div class="callout tip">
+      <strong>The default to set on day one</strong>
+      Metadata-rich and content-poor, with content capture as a deliberate, scoped, time-boxed exception on a small sample. State the cost of that default out loud rather than pretending it is free: with content off you can localise a failure to a step but you often cannot explain why the model did what it did. Most diagnostic power survives redaction because most diagnostic power is metadata, and the part that does not survive is the part you sample for.
+    </div>
+  </section>
+
+  <!-- ============ DECISION 1 ============ -->
+  <section class="section" id="decision-1">
+    <div class="section-kicker">
+      <span class="klabel">Decision 1 of 2</span>
+      <h2>Pick your lane before you look at a single demo <span class="tag exercise">◐ 12 min · whole group</span></h2>
+    </div>
+    <p class="lede">Run this in the room with nobody's laptop open. Every question here is answerable from what your organisation already is, and answering them first turns a three-month bake-off into a two-week one.</p>
+
+    <div class="steps">
+      <div class="step"><p><strong>Who reads the traces?</strong> If the answer is AI engineers debugging agent behaviour, lane one earns its keep because the native agent view is the product. If the answer is an existing SRE rota that already lives in one pane of glass, lane two is worth serious consideration even though you will build the views yourself.</p></div>
+      <div class="step"><p><strong>Do you already have an APM contract?</strong> Say the renewal number out loud. A second observability vendor is a second procurement cycle, a second access review and a second place to look during an incident, and that overhead is real even when the licence is cheap.</p></div>
+      <div class="step"><p><strong>Does anything about your data force self-hosting?</strong> If yes, the shortlist collapses to the self-hostable options, and you must read the actual licence: Phoenix is Elastic License 2.0 and Langfuse is MIT except its enterprise directories. Neither is plain permissive open source across the whole repository, and "it is open source" is not a statement your legal team can act on.</p></div>
+      <div class="step"><p><strong>Is anyone proposing lane three?</strong> That is a legitimate choice, and the honest way to make it is to say out loud that your producer code becomes the vendor's SDK, since there is no documented OTLP path for their LLM Observability product specifically. Absence of a documented path is not proof that none exists, so ask them directly and get the answer in writing.</p></div>
+      <div class="step"><p><strong>Now decide the attribute names, in the room.</strong> Cost and user identity do not exist in the conventional vocabulary, so somebody will invent a spelling for them. Pick it here, apply it at the application boundary, and write it into whatever document your team actually reads. This is the cheapest lock-in insurance available to you and it costs one meeting.</p></div>
+    </div>
+
+    <div class="prompt-box good">
+      <span class="label">★ The output that makes this real</span>
+      <p>A single page: the chosen lane and the reason, the two or three candidates inside it, the self-host requirement stated as yes or no, and the agreed spelling of your non-conventional attributes. Then the list of questions you are sending the vendor in writing, which should include every item on this page's unverified list. A shortlist without that list attached is a shortlist built partly on guesses.</p>
+    </div>
+  </section>
+
+  <!-- ============ DECISION 2 ============ -->
+  <section class="section" id="decision-2">
+    <div class="section-kicker">
+      <span class="klabel">Decision 2 of 2</span>
+      <h2>Make the content decision explicitly, before a library makes it <span class="tag exercise">◐ 10 min · in pairs</span></h2>
+    </div>
+    <p class="lede">This is the decision that gets made by a default if you do not make it on purpose. It is also the only decision in this session with a regulator on the other side of it, so it deserves a name, an owner and a date.</p>
+
+    <div class="steps">
+      <div class="step"><p><strong>Find out what you are capturing right now.</strong> Not what the policy says. Open a real trace from a real user in whatever tool you already run and see whether the prompt text is in it. Half the rooms that do this exercise discover the answer is yes, because they installed a library whose default is on.</p></div>
+      <div class="step"><p><strong>Write the default down as a sentence.</strong> "Metadata on 100% of traffic. Content on a consented sample of X%, in a separate store, retained for Y days, readable by this named group, with access logged." A default that is not written is not a default, it is whatever the library shipped.</p></div>
+      <div class="step"><p><strong>Check the fields people forget.</strong> Redacting the prompt is not enough. Tool call arguments and tool results are flagged as sensitive for good reason, and <strong>the tool arguments are frequently where the account number is</strong>. Retrieved document text is the other one.</p></div>
+      <div class="step"><p><strong>Allow-list rather than deny-list.</strong> Pattern-matching for personal data fails on the case nobody imagined, which for free text is most cases. Name the fields you keep, and drop everything else. Then scrub before ingestion, because once content reaches a vendor endpoint you have made a transfer.</p></div>
+      <div class="step"><p><strong>Name the person who can authorise a content capture window.</strong> During a real incident somebody will ask for prompts, and they will be right to ask. Decide now who can say yes, for how long, and what gets deleted afterwards. That is the difference between a scoped exception and a permanent policy change made at 2am.</p></div>
+    </div>
+
+    <div class="callout warn">
+      <strong>Two honesty notes for this exercise</strong>
+      First, minimisation and storage limitation are the obligations that bite here, which means sampling and redaction are your compliance mechanism and not merely a cost control. Second, if somebody in the room cites Singapore's AI advisory guidelines as authority for prompt-trace retention, be careful: those guidelines are not legally binding and multiple independent legal summaries state they do not cover generative AI at all, which makes that a secondary claim rather than a rule. The operative obligations are the ones the underlying act already imposes on consent, purpose, notification, protection and retention.
+    </div>
+  </section>
+
+  <!-- ============ HOMEWORK ============ -->
+  <section class="section" id="exercise">
+    <div class="section-kicker">
+      <span class="klabel">Homework</span>
+      <h2>Try it yourself - this week <span class="tag exercise">◐ 45-60 min total</span></h2>
+    </div>
+    <ul>
+      <li>Open one production trace and check whether prompt text is in it. Then check whether tool call arguments are. Write both answers into the content decision document as the current state, because the current state is usually different from the intended state and the gap is the finding.</li>
+      <li>Send every unverified item from this page to your shortlisted vendors as written questions: the billing unit and the dollar figure, self-hosting availability, the LLM feature set, the licence string for the component you intend to run, and whether an OTLP ingestion path exists for their LLM product specifically. Keep the replies with the contract.</li>
+      <li>Grep your own instrumentation for attribute names that are not conventional and not on your agreed list. Every one of them is a small piece of lock-in you created yourself, and unlike the vendor's kind it is free to fix this week.</li>
+      <li>Price two years of retention at your current volume, then at ten times that volume, and put both numbers next to the sentence about what content capture buys you diagnostically. Deciding this against real numbers takes an hour. Discovering it on an invoice takes a quarter.</li>
+      <li>Ask whoever owns access control how many people in your company can currently read a customer prompt out of your trace store. If the number surprises you, that is the first ticket from this session, and it is more urgent than the platform choice.</li>
+    </ul>
+  </section>
+
+  <!-- ============ SOURCES ============ -->
+  <section class="section" id="official">
+    <div class="section-kicker">
+      <span class="klabel">Source material</span>
+      <h2>Official sources covered</h2>
+    </div>
+    <p class="lede">Every platform fact on this page was read from vendor documentation and repositories rather than from summaries, and the things that could not be read are listed as unverified rather than filled in. This page covers:</p>
+    <div class="covered">
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">The three-way market split: OTLP-native LLM-specific, OTLP-native general APM, and proprietary-SDK</span><span class="note">Part 1 · primary [P] · ingest mechanism read per platform</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Langfuse ingest: OTLP-native, HTTP JSON and protobuf, no gRPC, Basic auth, and it documents reading three attribute dialects</span><span class="note">Part 1 and Part 2 · primary [P]</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Licence facts: Phoenix is Elastic License 2.0, Langfuse is MIT except its enterprise directories, the W&amp;B Weave repo is Apache-2.0</span><span class="note">Part 1 · primary [P] · neither self-hosted option is plain permissive OSS end to end</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Datadog LLM Observability is proprietary-SDK with no documented OTLP path for that product, and billing is based on the volume of spans you send</span><span class="note">Part 1 · primary [P] · absence of a documented path is not proof none exists</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Interop happens at the backend: every OpenInference trace is a valid OTLP trace, and the platform normalises the dialect that arrives</span><span class="note">Part 2 · primary [P] · this is why attribute names are the portable asset</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">The inverted default: OTel GenAI content capture is opt-in and off, quoted verbatim, while OpenInference captures content by default and hides it with explicit flags</span><span class="note">Part 2 · primary [P] · redaction writes a literal placeholder value</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Vocabulary gaps: the conventional GenAI namespace has no cost fields and no user id, while OpenInference has both</span><span class="note">Part 2 · primary [P] · which is where teams invent non-portable names</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">The two published vendor positions on content: monitoring decision patterns without conversation contents, and privacy controls preventing engineers from examining the interactions needed to reproduce bugs</span><span class="note">Part 3 · primary [P] · both quoted, both true, the split is the resolution</span></div>
+      <div class="covered-row"><span class="status pill light">◐</span><span class="name">Sensitive-field list including tool call arguments and results, and the allow-list-over-deny-list guidance</span><span class="note">Named here · the redaction mechanics are builder session b10</span></div>
+      <div class="covered-row"><span class="status pill light">◐</span><span class="name">Retention arithmetic of roughly ten times on full content capture</span><span class="note">Modelled, not measured · labelled as modelled in b5 and b10. Substitute your own storage price</span></div>
+      <div class="covered-row"><span class="status pill light">◐</span><span class="name">Singapore's AI advisory guidelines as authority for prompt-trace retention</span><span class="note">Secondary [S] and explicitly not relied on · the guidelines are not legally binding and independent legal summaries state they do not cover generative AI</span></div>
+      <div class="covered-row"><span class="status pill light">◐</span><span class="name">Feature-by-feature product comparison and vendor rankings</span><span class="note">Not covered by design · product surfaces move faster than this page can. The lane, the licence and the ingest path are the durable facts</span></div>
+    </div>
+
+    <div class="callout example">
+      <span class="ex-pill">Stated explicitly: what could NOT be verified</span>
+      <p>Nothing below was filled in from memory, and none of it should be quoted in your business case without a written answer from the vendor.</p>
+      <ul>
+        <li><strong>Dollar pricing for every platform except Datadog's basis</strong>, which is documented as the volume of spans you send. No price per span, per seat or per gigabyte could be verified for any candidate on this page.</li>
+        <li><strong>Braintrust self-hosting.</strong> Whether a self-hosted deployment is offered, and on what terms, could not be confirmed.</li>
+        <li><strong>Honeycomb's LLM feature set</strong> and its pricing. It ingests OTLP generically, which is why it sits in lane two, but LLM-specific capability could not be confirmed either way.</li>
+        <li><strong>Grafana Tempo's licence string.</strong> Tempo is open source; the exact licence was not read from the repository, so read it yourself before your legal review.</li>
+        <li><strong>Whether an OTLP ingestion path exists for Datadog LLM Observability specifically.</strong> None is documented. That is a documentation absence, not a proven technical absence, and it is a question for their sales engineer.</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- ============ QUIZ ============ -->
+  <section class="section" id="quiz">
+    <div class="section-kicker">
+      <span class="klabel">Check yourself</span>
+      <h2>Three questions before you go 🎯 <span class="tag exercise">◐ 90 seconds</span></h2>
+    </div>
+    <div class="quiz-q" data-answer="2">
+      <p class="qtext">1 · Seven of the eight platforms in Part 1 ingest OTLP. So where does lock-in actually live?</p>
+      <button class="qopt" type="button">A · In the wire protocol, which is why OTLP support is the decisive criterion</button>
+      <button class="qopt" type="button">B · In the self-hosting terms, since a hosted vendor can always raise prices</button>
+      <button class="qopt" type="button">C · In the attribute dialect and in everything built on top of it. Conventional attribute names port; dashboards, saved queries and alert rules do not, and bespoke attribute names turn a config change into a re-instrumentation project</button>
+      <p class="qwhy">Everybody speaks the same transport, so the transport is not the differentiator. Interop is resolved at the backend, where the platform normalises whichever dialect arrives, which is why one vendor documents reading three separate vocabularies. What that leaves you is a clean split: the instrumentation is portable if the keys are conventional, and the dashboards, alerts, saved queries and team habits are not portable at all. Budget for rebuilding the second column and spend your discipline on the first.</p>
+    </div>
+    <div class="quiz-q" data-answer="0">
+      <p class="qtext">2 · An engineer picks an instrumentation library on a Friday afternoon. What decision have they just made on the company's behalf?</p>
+      <button class="qopt" type="button">A · Whether prompt and completion content lands in the trace store, because the two vocabularies have opposite defaults: one is opt-in and off, the other captures content by default and expects you to switch it off</button>
+      <button class="qopt" type="button">B · Nothing consequential, since both emit the same wire format</button>
+      <button class="qopt" type="button">C · Only which dashboards will look nicest</button>
+      <p class="qwhy">This is the governance decision disguised as a tooling decision. The conventional GenAI spec says instrumentations should not capture message content by default and should offer an opt-in. OpenInference does the reverse: content is captured unless you set the hide flags. Same valid OTLP on the wire, opposite consequences for what sits in your trace store on day one, and nobody in the approval chain was ever shown a choice. Which is why the answer to "are we capturing prompts" has to come from opening a real trace, not from reading the policy.</p>
+    </div>
+    <div class="quiz-q" data-answer="1">
+      <p class="qtext">3 · A vendor publishes both that they monitor agent decision patterns without monitoring conversation contents, and that their privacy controls prevent engineers examining the interactions needed to reproduce bugs. How should you read that pair?</p>
+      <button class="qopt" type="button">A · As a contradiction that undermines both claims</button>
+      <button class="qopt" type="button">B · As the honest statement of a real trade-off, which is why the resolution is a split rather than a compromise: metadata at 100%, content on a small consented short-TTL sample with tighter access</button>
+      <button class="qopt" type="button">C · As evidence that content capture should always be on, since debugging matters more</button>
+      <p class="qwhy">Both statements are true and they point in opposite directions, which is exactly what a real trade-off looks like when somebody is being straight about it. Poor coverage hides failures; rich content capture creates legal and security exposure. Splitting the difference by capturing a bit of content everywhere gets you the exposure without the diagnostic power. Splitting the decision instead - full metadata always, content rarely and briefly and under access control - is the only arrangement where both halves of that published pair can be honoured.</p>
+    </div>
+    <p class="quiz-score"></p>
+  </section>
+
+  <!-- ============ CHEAT SHEET ============ -->
+  <section class="cheat" id="cheatsheet">
+    <h3>Leader session 6 cheat sheet <span>· pin this</span></h3>
+    <div class="grid-2">
+      <div class="cheat-item"><b>Three lanes, not two</b><span>OTLP-native LLM-specific. OTLP-native general APM. Proprietary SDK. Compare candidates inside a lane, never across lanes.</span></div>
+      <div class="cheat-item"><b>Lock-in is a dialect problem</b><span>Everybody takes OTLP. Conventional attribute names port. Names you invented do not.</span></div>
+      <div class="cheat-item"><b>Interop is at the backend</b><span>The platform normalises whichever dialect arrives. One vendor documents reading three vocabularies at once.</span></div>
+      <div class="cheat-item"><b>The licence, honestly</b><span>Phoenix is Elastic License 2.0. Langfuse is MIT except its enterprise directories. Neither is plain permissive OSS end to end.</span></div>
+      <div class="cheat-item"><b>The inverted default</b><span>Conventional GenAI content capture is opt-in and off. OpenInference is on by default. A library choice, not a policy choice, until you make it one.</span></div>
+      <div class="cheat-item"><b>Portable versus rented</b><span>Portable: instrumentation and exporter config. Rented: dashboards, saved queries, alert rules, muscle memory.</span></div>
+      <div class="cheat-item"><b>The content posture</b><span>Metadata at 100%, content on a small consented short-TTL sample in a separate store. Scrub before ingestion, never after.</span></div>
+      <div class="cheat-item"><b>Ask, do not assume</b><span>Unverified: dollar pricing beyond Datadog's per-span basis, Braintrust self-hosting, Honeycomb's LLM features, Tempo's licence string.</span></div>
+    </div>
+  </section>
+
+  <!-- ============ CLOSE ============ -->
+  <section class="section" id="close">
+    <div class="section-kicker">
+      <span class="klabel">Closing the leader track</span>
+      <h2>Six sessions, and the one sentence underneath all of them</h2>
+    </div>
+    <p class="lede">You started with a green dashboard that held through a real incident, and you finish with a purchase decision. The thread connecting those two things is simple enough to say in a corridor: a system can only report what somebody decided it should report, and every session in this track was a version of that decision.</p>
+
+    <table class="clean">
+      <tr><th>Session</th><th>The decision it asked you to make</th></tr>
+      <tr><td><strong>a1 · The trace is the receipt</strong></td><td>Accept that "it works in evals" and "it worked at 09:14" are different claims, and that only one of them has a receipt</td></tr>
+      <tr><td><strong>a2 · What to instrument</strong></td><td>Choose coverage before you know what you are looking for, because the 62% you cannot see is where incidents live</td></tr>
+      <tr><td><strong>a3 · Dashboards that answer</strong></td><td>Build views around the three questions rather than around available metrics, and stop expecting an aggregate to reveal an intermittent fault</td></tr>
+      <tr><td><strong>a4 · What AI actually costs you</strong></td><td>Change the denominator to cost per successful task, and accept that reliability work is cost work</td></tr>
+      <tr><td><strong>a5 · On-call for AI</strong></td><td>Write the alerting configuration policy, page on three burn-rate rules, and add the two alerts that see silent failure</td></tr>
+      <tr><td><strong>a6 · Buy, build, or stay OTel-native</strong></td><td>Pick the lane, spell the attributes conventionally, and make the content decision before a library default makes it for you</td></tr>
+    </table>
+
+    <div class="callout win">
+      <strong>★ If you only carry one thing out of the track</strong>
+      Your instrumentation is the asset and everything else is rented. The platform will change, the vendor list will change, the attribute registry is still moving and has no release to pin. What survives all of that is a team that decided, deliberately and in writing, what its systems report about themselves. That decision is not a technical artefact, which is why it was yours to make rather than an engineer's.
+    </div>
+
+    <div class="callout tip">
+      <strong>Where to go next, and who should go</strong>
+      The builder track is the same material with your hands on it: ten sessions that start from the six words this whole course runs on and end with privacy and retention proved out on a real trace. Send the engineers who will own the instrumentation, and read <strong>b1</strong> yourself even if you read nothing else, because it is forty-five minutes and it is the vocabulary every conversation in this area assumes you already have. If your team is only going to do one thing this quarter, make it session b5, where a badly instrumented incident gets solved lever by lever and the coverage argument stops being abstract.
+    </div>
+  </section>
+
+  <footer class="pagefoot">
+    <span>Leader session 6 of 6 · learn-ai-observability-with-phoebe · by Phoebe Fu &nbsp;·&nbsp; 📚 <a href="https://phoebefu6.github.io/learn-with-phoebe/">Learn with Phoebe ↗</a></span>
+    <span><a href="../index.html">← Course home</a> &nbsp;·&nbsp; <a href="b1-spans-and-traces.html">Next: Builder track starts here →</a></span>
+  </footer>
+
+</main>
+
+<script src="../assets/app.js?v=2"></script>
+</body>
+</html>

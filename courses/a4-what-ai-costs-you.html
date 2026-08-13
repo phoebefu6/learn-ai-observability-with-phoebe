@@ -1,0 +1,555 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Leader session 4 · What AI actually costs you - learn ai observability with phoebe</title>
+<link rel="stylesheet" href="../assets/style.css?v=2">
+</head>
+<body>
+
+<div class="toolbar">
+  <div class="wrap">
+    <span class="crumb"><a href="../index.html">learn-ai-observability-with-phoebe</a> / Leader session 4 of 6</span>
+    <button class="btn" id="toggle-all" type="button">Expand all</button>
+    <button class="btn primary" id="zoom-toggle" type="button">Projector zoom: off</button>
+  </div>
+</div>
+
+<header class="masthead">
+  <div class="wrap">
+    <div class="eyebrow">Learn AI Observability with Phoebe · Leader track · Session 4 of 6</div>
+    <h1>What AI actually costs you: <span class="accent">the invoice is not attribution</span></h1>
+    <p class="sub">Your provider invoice is one true number with no structure in it. It cannot tell you which feature, which tenant or which failed attempt spent the money, and the metric most teams reach for instead - cost per call - is not merely imprecise, it points the wrong way. This session gives you the right denominator, the arithmetic that turns a reliability problem into a cost problem, the caching economics with the four traps that show up as unexplained spend, and the three places an attribution key can actually live. Every price on this page carries the date it was read: <strong>2026-08-13</strong>.</p>
+    <div class="chip-row">
+      <span class="chip level">🟡 Leader track</span>
+      <span class="chip audience">Heads of engineering · platform leads · SRE managers</span>
+      <span class="chip time">45 min</span>
+    </div>
+    <div class="agenda">
+      <span class="a1" style="flex:1">0-3 · Welcome</span>
+      <span class="a2" style="flex:4">3-16 · The wrong denominator</span>
+      <span class="a3" style="flex:5">16-38 · Caching economics and the four traps</span>
+      <span class="a4" style="flex:2">38-45 · Attribution · Q&amp;A</span>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <!-- ============ INTRO ============ -->
+  <section class="section" id="intro">
+    <div class="section-kicker">
+      <span class="klabel">Part 0</span>
+      <h2>An invoice is a total, not an explanation</h2>
+    </div>
+    <p class="lede">There is a moment in every AI programme where finance asks a question engineering cannot answer. The invoice says the number. Nobody can say which feature earned it, which tenant consumed it, or how much of it was spent on attempts that failed. That gap is not an accounting problem and it is not a pricing problem. It is an observability problem, and it is the only one in this course where the business consequence is visible on a spreadsheet before it is visible to a user.</p>
+    <div class="legend">
+      <span class="pill solid">Live - presented in session</span>
+      <span class="pill light">Self-study - read after class</span>
+      <span class="pill inkpill">Official sources covered</span>
+    </div>
+    <div class="callout win">
+      <strong>★ What you walk out with today</strong>
+      Why cost per call moves the wrong way and will make you reject good fixes, the <code>c / p</code> derivation that converts a success rate into a cost multiplier, what happens when you compose it with the published 4x and 15x agent token multipliers, the caching economics with break-even and the four traps that silently delete your discount, the tokenizer change that raises your bill by roughly 30% at an identical posted price, and the three places an attribution key can live - only one of which is enforced.
+    </div>
+    <div class="callout tip">
+      <strong>One sentence for the whole course</strong>
+      Evals tell you whether it works. Observability tells you what actually happened. Cost is the one place where "what actually happened" arrives on its own, once a month, in a form deliberately stripped of everything you need to act on it.
+    </div>
+    <div class="callout example">
+      <span class="ex-pill">Two labels to keep straight all session</span>
+      <p><strong>Verified and primary:</strong> the caching multipliers and break-even language, the minimum-prefix and invalidation behaviour, the <code>input_tokens</code> accounting, the 4x and 15x token multipliers, the ~30% tokenizer change, and every line item in the table further down. All read from vendor documentation on <strong>2026-08-13</strong>.</p>
+      <p><strong>Derived, not published:</strong> the <code>E[cost per success] = c / p</code> table and the ~25x composition that follows from it. That is arithmetic performed on this page, clearly labelled as such wherever it appears. It is sound and it is not a statistic anyone measured.</p>
+    </div>
+  </section>
+
+  <!-- ============ PART 1 ============ -->
+  <section class="section" id="denominator">
+    <div class="section-kicker">
+      <span class="klabel">Part 1 · the denominator</span>
+      <h2>Cost per call moves the wrong way <span class="tag concept">13 min live</span></h2>
+    </div>
+    <p class="lede">This is the single most valuable idea in the leader track, and it is a sign error rather than a magnitude error. If you set a cost-per-call target, you have built an incentive that fights your reliability work, and it will do that quietly, in a review meeting, using numbers that are all completely correct.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 386" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="A worked illustration. Before a fix: 100 attempts, 60 succeed, cheap early failures, cost per call 0.280 dollars and cost per success 0.467 dollars. After the fix: 80 succeed, cost per call rises to 0.340 while cost per success falls to 0.425. The two dashboards disagree about the same fix.">
+        <style>
+          .d4T { font: 700 13px Inter, sans-serif; fill: #1B2230; }
+          .d4H { font: 700 12.5px Inter, sans-serif; fill: #16305C; }
+          .d4C { font: 700 12.5px Inter, sans-serif; fill: #08323A; }
+          .d4X { font: 400 11px Inter, sans-serif; fill: #66707E; }
+          .d4B { font: 700 12.5px Inter, sans-serif; fill: #0C1F3F; }
+          .d4K { font: 600 12.5px Inter, sans-serif; fill: #08323A; }
+        </style>
+
+        <text class="d4T" x="24" y="30">One fix, two verdicts - worked illustration, arithmetic only, nothing measured</text>
+
+        <rect x="24" y="44" width="404" height="172" rx="10" fill="#EDF2FB" stroke="#AFC0E4" stroke-width="1.5"/>
+        <text class="d4H" x="44" y="68">Before: attempts bail out early</text>
+        <text class="d4X" x="44" y="94">100 attempts, 60 of them succeed</text>
+        <text class="d4X" x="44" y="112">60 successes x $0.40 = $24.00</text>
+        <text class="d4X" x="44" y="130">40 cheap early failures x $0.10 = $4.00</text>
+        <text class="d4X" x="44" y="148">Total spend $28.00</text>
+        <line x1="44" y1="160" x2="408" y2="160" stroke="#AFC0E4" stroke-width="1"/>
+        <text class="d4B" x="44" y="180">Cost per call $0.280</text>
+        <text class="d4B" x="44" y="200">Cost per success $0.467</text>
+
+        <rect x="452" y="44" width="404" height="172" rx="10" fill="#E4F6F9" stroke="#0891A6" stroke-width="1.5"/>
+        <text class="d4C" x="472" y="68">After: the bail-out path is fixed</text>
+        <text class="d4X" x="472" y="94">100 attempts, 80 of them succeed</text>
+        <text class="d4X" x="472" y="112">80 successes x $0.40 = $32.00</text>
+        <text class="d4X" x="472" y="130">20 cheap early failures x $0.10 = $2.00</text>
+        <text class="d4X" x="472" y="148">Total spend $34.00</text>
+        <line x1="472" y1="160" x2="836" y2="160" stroke="#0891A6" stroke-width="1"/>
+        <text class="d4B" x="472" y="180">Cost per call $0.340   up 21%</text>
+        <text class="d4B" x="472" y="200">Cost per success $0.425   down 9%</text>
+
+        <rect x="24" y="232" width="832" height="80" rx="10" fill="#FFFFFF" stroke="#C7CFDA" stroke-width="1.5"/>
+        <text class="d4T" x="44" y="256">Same fix. The two dashboards disagree about whether it was a good idea.</text>
+        <text class="d4X" x="44" y="278">Cost per call rose 21%, so a cost-per-call target rejects this fix. Cost per successful task fell 9%, and</text>
+        <text class="d4X" x="44" y="296">the users got 33% more finished work for 21% more money. Only one of those two numbers is the business.</text>
+
+        <rect x="24" y="328" width="832" height="44" rx="10" fill="#FFFFFF" stroke="#C7CFDA" stroke-width="1.5"/>
+        <rect x="42" y="342" width="14" height="14" rx="3" fill="#0891A6"/>
+        <text class="d4K" x="66" y="354">Optimise cost per call and you will reject the fixes that make the product work.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - the sign flip, with every number in it arithmetic rather than measurement</figcaption>
+    </figure>
+
+    <p>The mechanism is worth saying in one sentence you can repeat in a budget meeting: <strong>short cheap failures leave the denominator</strong>. Any fix that stops attempts abandoning early - a retry path that works, a loop that terminates properly, a tool that stops erroring - removes cheap attempts from your average and replaces them with full-price successful ones. Average cost per call goes up. Cost per unit of delivered work goes down. A team measured on the first number learns to leave the bug in.</p>
+
+    <div class="callout warn">
+      <strong>The same trap in the other direction</strong>
+      A runaway-loop fix can flip the sign the other way and it is just as misleading. Cap the loops and your expensive failures get cheaper, so cost per call falls and everyone celebrates - while the tasks that used to eventually succeed on step nine now fail at step five, and cost per successful task rises. Cost per call moved in the "good" direction for a change that made the product worse. The denominator is the whole argument, not the direction of travel.
+    </div>
+
+    <h3>The derivation, and it is a derivation</h3>
+    <p>If <code>c</code> is the mean cost of one attempt and <code>p</code> is the probability that an attempt succeeds, then in expectation you pay for <code>1 / p</code> attempts per success, so <code>E[cost per success] = c / p</code>. That is all it is - a line of arithmetic, not a finding. It is on this page because the numbers it produces are much larger than people expect and because it converts an engineering conversation into a finance one.</p>
+
+    <table class="clean">
+      <tr><th>Task success rate <code>p</code></th><th>Cost per success, as a multiple of cost per attempt</th><th>What it means in a budget conversation</th></tr>
+      <tr><td><strong>95%</strong></td><td>1.05x</td><td>Failures are a rounding error. Optimise the model and the prompt</td></tr>
+      <tr><td><strong>80%</strong></td><td>1.25x</td><td>A quarter of your spend is buying nothing. Noticeable, tolerable</td></tr>
+      <tr><td><strong>60%</strong></td><td>1.67x</td><td>Two thirds of a second run, on average, before anything ships. Reliability is now your cost lever</td></tr>
+      <tr><td><strong>40%</strong></td><td>2.50x</td><td>You are paying two and a half times list price for delivered work</td></tr>
+      <tr><td><strong>25%</strong></td><td>4.00x</td><td>Three of every four dollars are spent on attempts nobody can use</td></tr>
+    </table>
+
+    <p class="lede">Now compose that derivation with two numbers somebody actually measured, and the leader-track punchline arrives.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 380" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Token multipliers: chat is the 1x baseline, a single agent uses about 4x more tokens, a multi-agent system about 15x more. Dividing 15x by a 60 percent success rate gives roughly 25x per successful task, which is a derivation composed with two published measurements.">
+        <style>
+          .m4T { font: 700 13px Inter, sans-serif; fill: #1B2230; }
+          .m4L { font: 600 11px Inter, sans-serif; fill: #1B2230; }
+          .m4V { font: 400 11px Inter, sans-serif; fill: #66707E; }
+          .m4W { font: 700 11px Inter, sans-serif; fill: #FFFFFF; }
+          .m4X { font: 400 11px Inter, sans-serif; fill: #66707E; }
+          .m4K { font: 600 12.5px Inter, sans-serif; fill: #08323A; }
+        </style>
+
+        <text class="m4T" x="24" y="30">Two published measurements, multiplied by one derivation</text>
+
+        <text class="m4L" x="24" y="66">Chat interaction</text>
+        <rect x="190" y="48" width="26" height="28" rx="6" fill="#AFC0E4"/>
+        <text class="m4V" x="226" y="66">1x tokens - the baseline</text>
+
+        <text class="m4L" x="24" y="110">Single agent</text>
+        <rect x="190" y="92" width="104" height="28" rx="6" fill="#3F62A8"/>
+        <text class="m4V" x="304" y="110">about 4x more tokens than chat</text>
+
+        <text class="m4L" x="24" y="154">Multi-agent system</text>
+        <rect x="190" y="136" width="390" height="28" rx="6" fill="#16305C"/>
+        <text class="m4V" x="590" y="154">about 15x more tokens than chat</text>
+
+        <text class="m4L" x="24" y="195">Multi-agent at 60%</text>
+        <rect x="190" y="174" width="650" height="34" rx="7" fill="#0891A6"/>
+        <text class="m4W" x="204" y="195">about 25x per SUCCESSFUL task - 15x x 1.67, derived</text>
+
+        <rect x="24" y="224" width="832" height="82" rx="10" fill="#FFFFFF" stroke="#C7CFDA" stroke-width="1.5"/>
+        <text class="m4X" x="44" y="248">The 4x and 15x figures are published measurements of ONE production system - Anthropic's own Research</text>
+        <text class="m4X" x="44" y="266">feature, circa 2025 - and not a universal law. The 1.67x divisor is arithmetic from c / p and not a</text>
+        <text class="m4X" x="44" y="284">measurement. Treat the composition as an order-of-magnitude planning number, not a quoted statistic.</text>
+
+        <rect x="24" y="322" width="832" height="44" rx="10" fill="#FFFFFF" stroke="#C7CFDA" stroke-width="1.5"/>
+        <rect x="42" y="336" width="14" height="14" rx="3" fill="#0891A6"/>
+        <text class="m4K" x="66" y="348">The failed 40% are your most expensive attempts, because failures run long before they give up.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - two measurements and one derivation, kept clearly apart</figcaption>
+    </figure>
+
+    <p>Read the bottom line of that figure carefully, because it makes the table optimistic rather than pessimistic. The <code>c / p</code> arithmetic assumes a failed attempt costs the same as a successful one. In agent systems it usually costs more: the failure modes that dominate are loops, repeated steps, retries and timeouts, all of which burn tokens for longer before giving up. So the real ratio at 60% success is worse than 1.67x, and the honest way to present the ~25x number is as a floor with a wide error bar rather than as an estimate.</p>
+
+    <div class="callout tip">
+      <strong>The consequence that funds your reliability roadmap</strong>
+      Reliability work <em>is</em> cost work. Holding the price of an attempt constant, moving task success from 60% to 80% cuts cost per successful task by <strong>25%</strong> - 1.67x down to 1.25x - with no renegotiation, no model swap and no engineering on the prompt. That is a bigger discount than most teams get from a year of provider negotiation, and it is available to a team that fixes its termination conditions. It also does not appear on any cost-per-call dashboard, which is the point of the whole session.
+    </div>
+
+    <details class="card" open>
+      <summary><span class="mode live">Live</span>Attribute at the task level, not the call level<span class="mini">4 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>A task is what the user asked for and what you charge for. A call is an implementation detail that your engineers can change ten times this quarter. If your unit of cost is the call, then every architectural improvement looks like a cost regression and every architectural regression looks like a saving.</p>
+        <p>This is also where a real telemetry trap lives, and it is builder session b4's territory: in the agent conventions, <strong>token attribution double-counts by design</strong>. The <code>invoke_agent</code> span carries aggregate token usage <em>and</em> each child inference span carries its own. Sum across depths and you inflate your own cost figures, then spend a week explaining a variance that you created. Sum at one level only.</p>
+        <p>The metrics worth asking your team to emit, each sliced by tenant, feature and model: <code>cost_per_task_attempt</code>, <code>task_success_rate</code>, <code>cost_per_successful_task</code>, <code>cost_per_failed_task</code>, <code>tokens_per_task</code>, <code>cache_hit_rate</code>, <code>retries_per_task</code>, <code>steps_per_task</code>. Note the fourth one. Cost per <em>failed</em> task is the number that tells you whether your failures are cheap and fast or expensive and stubborn, and it is the one nobody thinks to ask for.</p>
+      </div>
+    </details>
+  </section>
+
+  <!-- ============ PART 2 ============ -->
+  <section class="section" id="caching">
+    <div class="section-kicker">
+      <span class="klabel">Part 2 · caching economics</span>
+      <h2>The discount that quietly is not applied <span class="tag concept">22 min live</span></h2>
+    </div>
+    <p class="lede">Prompt caching is the largest single lever on an AI bill and the most fragile. The pricing is simple enough to fit in three lines. The four ways it silently stops working are the reason your spend chart has a step change in it that nobody can explain, and three of the four return no error at all.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 330" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Cache pricing multipliers against base input: a cache read costs 0.1x, a five-minute cache write 1.25x, a one-hour cache write 2x. Break-even is after one read at five minutes or two reads at one hour.">
+        <style>
+          .k4T { font: 700 13px Inter, sans-serif; fill: #1B2230; }
+          .k4L { font: 600 11px Inter, sans-serif; fill: #1B2230; }
+          .k4V { font: 400 11px Inter, sans-serif; fill: #66707E; }
+          .k4H { font: 700 12.5px Inter, sans-serif; fill: #08323A; }
+          .k4X { font: 400 11px Inter, sans-serif; fill: #66707E; }
+          .k4K { font: 600 12.5px Inter, sans-serif; fill: #08323A; }
+        </style>
+
+        <text class="k4T" x="24" y="30">Anthropic prompt caching, read 2026-08-13 - multipliers against base input</text>
+
+        <text class="k4L" x="24" y="67">Cache read (hit)</text>
+        <rect x="210" y="48" width="20" height="28" rx="6" fill="#0891A6"/>
+        <text class="k4V" x="240" y="67">0.1x base input tokens</text>
+
+        <text class="k4L" x="24" y="111">5-minute cache write</text>
+        <rect x="210" y="92" width="250" height="28" rx="6" fill="#3F62A8"/>
+        <text class="k4V" x="470" y="111">1.25x base input tokens</text>
+
+        <text class="k4L" x="24" y="155">1-hour cache write</text>
+        <rect x="210" y="136" width="400" height="28" rx="6" fill="#16305C"/>
+        <text class="k4V" x="620" y="155">2x base input tokens</text>
+
+        <rect x="24" y="176" width="832" height="80" rx="10" fill="#E4F6F9" stroke="#0891A6" stroke-width="1.5"/>
+        <text class="k4H" x="44" y="200">Break-even, quoted from the documentation</text>
+        <text class="k4X" x="44" y="222">Caching pays off after ONE cache read at the 5-minute duration (1.25x write), or after TWO cache reads</text>
+        <text class="k4X" x="44" y="240">at the 1-hour duration (2x write). Below that you have paid a write premium and received nothing.</text>
+
+        <rect x="24" y="272" width="832" height="44" rx="10" fill="#FFFFFF" stroke="#C7CFDA" stroke-width="1.5"/>
+        <rect x="42" y="286" width="14" height="14" rx="3" fill="#0891A6"/>
+        <text class="k4K" x="66" y="298">A 0.1x read is a discount only if the read happens. Each trap below is a read that did not.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - three multipliers and one break-even rule, priced 2026-08-13</figcaption>
+    </figure>
+
+    <p>Everything about caching economics follows from the asymmetry in that figure. The write costs more than an uncached request and the read costs almost nothing, so caching is a bet that the read will happen. When the bet pays you get a 10x discount on the cached portion. When it does not, you have paid a 25% or 100% premium for the privilege of trying. Nothing in your telemetry announces which of the two occurred unless you put the token quartet on the span.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 440" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Four silent caching traps: the TTL clock starts at the beginning of the writing request and streaming counts against it, the minimum cacheable prefix is enforced with no error returned, changing a tool definition invalidates the entire cache, and input_tokens counts only tokens after the last cache breakpoint.">
+        <style>
+          .p4T { font: 700 12.5px Inter, sans-serif; fill: #FFFFFF; }
+          .p4S { font: 400 11px Inter, sans-serif; fill: #AFC0E4; }
+          .p4C { font: 400 11px Inter, sans-serif; fill: #E4F6F9; }
+          .p4X { font: 400 11px Inter, sans-serif; fill: #66707E; }
+          .p4K { font: 600 12.5px Inter, sans-serif; fill: #08323A; }
+        </style>
+
+        <rect x="24" y="24" width="192" height="76" rx="10" fill="#16305C"/>
+        <text class="p4T" x="42" y="50">1 · The TTL clock</text>
+        <text class="p4S" x="42" y="68">streaming counts too</text>
+        <rect x="230" y="24" width="626" height="76" rx="10" fill="#EDF2FB" stroke="#AFC0E4" stroke-width="1.5"/>
+        <text class="p4X" x="250" y="46">The TTL runs from the START of the writing request, and streaming time counts</text>
+        <text class="p4X" x="250" y="64">against it. If a response takes 4 minutes to stream, a follow-up reusing that</text>
+        <text class="p4X" x="250" y="82">prefix must start within about 1 minute. A latency problem becomes a cost bug.</text>
+
+        <rect x="24" y="112" width="192" height="76" rx="10" fill="#3F62A8"/>
+        <text class="p4T" x="42" y="138">2 · Minimum prefix</text>
+        <text class="p4S" x="42" y="156">no error is returned</text>
+        <rect x="230" y="112" width="626" height="76" rx="10" fill="#EDF2FB" stroke="#AFC0E4" stroke-width="1.5"/>
+        <text class="p4X" x="250" y="134">Below the minimum cacheable prefix - 512 to 4,096 tokens depending on model -</text>
+        <text class="p4X" x="250" y="152">the request is processed WITHOUT caching and no error is returned. A silent</text>
+        <text class="p4X" x="250" y="170">input-cost regression whose only symptom is the invoice, weeks later.</text>
+
+        <rect x="24" y="200" width="192" height="76" rx="10" fill="#3F62A8"/>
+        <text class="p4T" x="42" y="226">3 · Tool definitions</text>
+        <text class="p4S" x="42" y="244">they invalidate all</text>
+        <rect x="230" y="200" width="626" height="76" rx="10" fill="#EDF2FB" stroke="#AFC0E4" stroke-width="1.5"/>
+        <text class="p4X" x="250" y="222">The invalidation hierarchy runs tools, then system, then messages. Changing a</text>
+        <text class="p4X" x="250" y="240">tool definition invalidates the ENTIRE cache. Adding one tool can double your</text>
+        <text class="p4X" x="250" y="258">input bill before anyone connects the deploy to the line item.</text>
+
+        <rect x="24" y="288" width="192" height="76" rx="10" fill="#0891A6"/>
+        <text class="p4T" x="42" y="314">4 · input_tokens</text>
+        <text class="p4C" x="42" y="332">counts after the cut</text>
+        <rect x="230" y="288" width="626" height="76" rx="10" fill="#E4F6F9" stroke="#0891A6" stroke-width="1.5"/>
+        <text class="p4X" x="250" y="310">input_tokens counts only the tokens AFTER the last cache breakpoint. A 200k</text>
+        <text class="p4X" x="250" y="328">cached document plus a 50-token question reports input_tokens: 50 - so a</text>
+        <text class="p4X" x="250" y="346">dashboard reading that field under-reports the request by roughly 4000x.</text>
+
+        <rect x="24" y="380" width="832" height="44" rx="10" fill="#FFFFFF" stroke="#C7CFDA" stroke-width="1.5"/>
+        <rect x="42" y="394" width="14" height="14" rx="3" fill="#0891A6"/>
+        <text class="p4K" x="66" y="406">Log the quartet: cache creation, cache read, input tokens, and their sum. One alone lies.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - four traps, three of which return no error at all</figcaption>
+    </figure>
+
+    <p>Trap four is the one to take back to your team today, because it is not a cost bug, it is a <strong>measurement</strong> bug that makes every other cost investigation unreliable. A dashboard reading <code>input_tokens</code> on a request that reuses a 200k cached document reports 50 tokens instead of roughly 200,050. Under-reporting by a factor of about four thousand on your highest-volume request pattern is enough to make token-per-request charts, per-tenant attribution and capacity forecasts all quietly wrong in the same direction.</p>
+
+    <div class="callout warn">
+      <strong>Trap one is the sneaky one, because it crosses domains</strong>
+      The cache TTL starts when the writing request starts, and the time spent streaming the response counts against it. So a change that makes responses longer - a better prompt, a more thorough answer, a reasoning model - can push your follow-up requests past the TTL and turn cache hits into cache writes. Nobody will look for a cost regression in a quality improvement. This is the clearest example in the course of a latency property causing a cost outcome, and it is why cost and latency belong on the same span rather than in two different tools owned by two different teams.
+    </div>
+
+    <details class="card" open>
+      <summary><span class="mode live">Live</span>The tokenizer trap: a 30% increase at an identical posted price<span class="mini">5 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>Claude 4.7 and later models use a newer tokenizer, and the documentation states plainly that it <strong>produces approximately 30% more tokens for the same text</strong>. Sit with what that means for a migration decision. You move to a newer model at an identical posted dollars-per-token price, your traffic does not change by a single request, and your bill goes up by roughly 30%.</p>
+        <p>Now the observability point, which is the reason this belongs in this course rather than in a procurement deck. Your <strong>dollars-per-token chart looks perfectly fine</strong>, because the price per token really did not change. The chart that moves is <strong>tokens per request</strong> - and most teams do not have that chart, because tokens per request feels like an engineering detail rather than a financial one. If your only cost telemetry is the invoice and a price list, this change is undetectable until the month closes, and then it is indistinguishable from a usage increase.</p>
+        <p>It also breaks anything you threshold on token counts. Alerts on tokens per request, context-window headroom warnings, per-tenant token quotas and truncation-risk monitors all shift by about 30% for a reason that is not a bug and will not appear in any changelog you own.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode self">Self-study</span>Line items that never appear on a token dashboard<span class="mini">4 min read</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>All figures below were read from vendor documentation on <strong>2026-08-13</strong> and every one of them should be re-verified before you quote it internally.</p>
+        <table class="clean">
+          <tr><th>Line item</th><th>What it costs</th><th>Why it surprises people</th></tr>
+          <tr><td><strong>Batch API</strong></td><td>50% off input and output, and it <strong>stacks with caching</strong>. 24-hour expiry, and expired requests are unbilled</td><td>The largest uncontroversial discount available. Observed batch cache hit rates run 30-98%, so the two discounts compound unpredictably</td></tr>
+          <tr><td><strong>Web search</strong></td><td><strong>$10 per 1,000 searches</strong>, and results count as input tokens again on subsequent turns</td><td>You pay for the search once and for its results on every following turn of the conversation</td></tr>
+          <tr><td><strong>Web fetch</strong></td><td>Tokens only, but roughly <strong>125,000 tokens for a 500 kB research PDF</strong></td><td>One unbounded fetch can consume a context window, which is a quality incident and a cost incident at once</td></tr>
+          <tr><td><strong>Code execution</strong></td><td>1,550 free container-hours per organisation per month, then <strong>$0.05 per hour</strong> - and it is <strong>billed even if never called</strong> when files are attached</td><td>A cost you incur by configuration rather than by use, which no per-call attribution model will find</td></tr>
+          <tr><td><strong>Geographic routing</strong></td><td><code>inference_geo: "us"</code> applies <strong>1.1x on every token category</strong></td><td>A compliance decision made by one team appears as a 10% cost increase owned by another</td></tr>
+          <tr><td><strong>Tool-use overhead</strong></td><td><strong>286-804 tokens per request</strong> depending on model and <code>tool_choice</code> setting</td><td>It is invisible in your own prompt text, so your token estimates are low by a fixed amount on every single request</td></tr>
+        </table>
+        <p>The pattern across all six: none of them are visible in the prompt your engineers wrote, several are billed by configuration rather than by use, and every one of them lands on a shared invoice with no feature or tenant attached.</p>
+      </div>
+    </details>
+
+    <div class="callout example">
+      <span class="ex-pill">Dating discipline, with a live example</span>
+      <p>Every price on this page carries the date <strong>2026-08-13</strong>, and here is the reason stated by a vendor about itself: the Anthropic pricing page's own footnote records that a planned Sonnet 5 increase to <strong>$3/$15 on 1 September 2026 "will not occur"</strong>. A published, dated, scheduled price change was cancelled. Any internal document that quotes a model price without a date is already wrong or shortly will be, and the same holds for the multipliers, the free tiers and the minimum prefix sizes on this page.</p>
+    </div>
+  </section>
+
+  <!-- ============ PART 3 ============ -->
+  <section class="section" id="attribution">
+    <div class="section-kicker">
+      <span class="klabel">Part 3 · attribution</span>
+      <h2>Where the key can actually live <span class="tag concept">7 min live</span></h2>
+    </div>
+    <p class="lede">Attribution has exactly three places to put the key, and they trade off along the same axis every time: the more enforced a boundary is, the coarser it is. Choosing one is a real architectural decision, not a tooling preference, and most teams need two of the three.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 340" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Three places an attribution key can live: provider-side workspaces are the only enforced boundary but coarse, span attributes on your own telemetry are arbitrarily fine but enforce nothing, and cache-key affinity is both an efficiency and an attribution lever.">
+        <style>
+          .a4T { font: 700 13px Inter, sans-serif; fill: #1B2230; }
+          .a4H { font: 700 12.5px Inter, sans-serif; fill: #FFFFFF; }
+          .a4S { font: 400 11px Inter, sans-serif; fill: #AFC0E4; }
+          .a4C { font: 400 11px Inter, sans-serif; fill: #E4F6F9; }
+          .a4X { font: 400 11px Inter, sans-serif; fill: #66707E; }
+          .a4K { font: 600 12.5px Inter, sans-serif; fill: #08323A; }
+        </style>
+
+        <text class="a4T" x="24" y="30">Attribution has exactly three places to put the key</text>
+
+        <rect x="24" y="44" width="268" height="52" rx="10" fill="#0C1F3F"/>
+        <text class="a4H" x="40" y="66">Provider-side workspaces</text>
+        <text class="a4S" x="40" y="84">the only ENFORCED boundary</text>
+        <rect x="24" y="96" width="268" height="170" rx="10" fill="#EDF2FB" stroke="#AFC0E4" stroke-width="1.5"/>
+        <text class="a4X" x="40" y="118">Per-workspace spend and rate</text>
+        <text class="a4X" x="40" y="136">limits, plus the workspace id</text>
+        <text class="a4X" x="40" y="154">on the response header. The</text>
+        <text class="a4X" x="40" y="172">only boundary that anything</text>
+        <text class="a4X" x="40" y="190">actually enforces.</text>
+        <text class="a4X" x="40" y="208">Coarse: one key per team or</text>
+        <text class="a4X" x="40" y="226">product. Not per user, not</text>
+        <text class="a4X" x="40" y="244">per feature, not per task.</text>
+
+        <rect x="306" y="44" width="268" height="52" rx="10" fill="#16305C"/>
+        <text class="a4H" x="322" y="66">Span attributes</text>
+        <text class="a4S" x="322" y="84">fine-grained, unenforced</text>
+        <rect x="306" y="96" width="268" height="170" rx="10" fill="#EDF2FB" stroke="#AFC0E4" stroke-width="1.5"/>
+        <text class="a4X" x="322" y="118">tenant.id, a pseudonymous</text>
+        <text class="a4X" x="322" y="136">user.id, feature.id, plus the</text>
+        <text class="a4X" x="322" y="154">token quartet and the model</text>
+        <text class="a4X" x="322" y="172">name, on your own spans.</text>
+        <text class="a4X" x="322" y="190">Arbitrarily fine, and this is</text>
+        <text class="a4X" x="322" y="208">what buys cost per successful</text>
+        <text class="a4X" x="322" y="226">task. Enforces nothing: a bug</text>
+        <text class="a4X" x="322" y="244">can still spend elsewhere.</text>
+
+        <rect x="588" y="44" width="268" height="52" rx="10" fill="#0891A6"/>
+        <text class="a4H" x="604" y="66">Cache-key affinity</text>
+        <text class="a4C" x="604" y="84">efficiency and attribution</text>
+        <rect x="588" y="96" width="268" height="170" rx="10" fill="#E4F6F9" stroke="#0891A6" stroke-width="1.5"/>
+        <text class="a4X" x="604" y="118">Route a tenant's traffic to a</text>
+        <text class="a4X" x="604" y="136">stable prefix and cache key.</text>
+        <text class="a4X" x="604" y="154">You get the 0.1x reads AND a</text>
+        <text class="a4X" x="604" y="172">natural attribution seam.</text>
+        <text class="a4X" x="604" y="190">On a provider with automatic</text>
+        <text class="a4X" x="604" y="208">caching, a varying prefix - a</text>
+        <text class="a4X" x="604" y="226">timestamp, a name - costs you</text>
+        <text class="a4X" x="604" y="244">the whole discount.</text>
+
+        <rect x="24" y="282" width="832" height="44" rx="10" fill="#FFFFFF" stroke="#C7CFDA" stroke-width="1.5"/>
+        <rect x="42" y="296" width="14" height="14" rx="3" fill="#0891A6"/>
+        <text class="a4K" x="66" y="308">The enforced boundary is coarse. The fine-grained one is advisory. You need both.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - three placements, and the enforcement-versus-granularity trade that never goes away</figcaption>
+    </figure>
+
+    <p>The distinction that matters in a governance conversation is between <em>enforced</em> and <em>reported</em>. A workspace with its own spend and rate limits will stop a runaway loop from spending another product's budget, because the provider refuses the request. A <code>tenant.id</code> span attribute will tell you afterwards, beautifully, exactly which tenant's budget got consumed by someone else's bug. Both are worth having and only one of them is a control.</p>
+
+    <div class="callout tip">
+      <strong>Where the third one earns its place</strong>
+      Cache-key affinity is the only lever on the page that improves two things at once. Routing a tenant's traffic to a stable prefix means the cached prefix is reused, so you get the 0.1x reads, and the routing key doubles as an attribution seam you did not have to invent. The mirror-image warning belongs in the same breath: on a provider whose caching is automatic rather than explicit, a prefix that varies per request - a timestamp at the top of the system prompt, a user's name, a session counter - silently costs you the entire discount, with no write premium to notice and no error to catch.
+    </div>
+  </section>
+
+  <!-- ============ EXERCISE 1 ============ -->
+  <section class="section" id="decision-1">
+    <div class="section-kicker">
+      <span class="klabel">Decision drill 1 of 2</span>
+      <h2>Approve the fix, or reject it <span class="tag exercise">◐ 8 min · in pairs</span></h2>
+    </div>
+    <p class="lede">Commit to a decision before you discuss it, and notice what your instinct does with the first number you are shown. That instinct is the thing this drill is trying to change.</p>
+
+    <div class="callout example">
+      <span class="ex-pill">The proposal on your desk</span>
+      <p>An engineer wants two weeks to fix the retry path in your document-analysis agent. Their write-up says: task success rate goes from about 60% to about 80%, average cost per call rises about 21%, monthly spend rises from $28k to $34k. Your quarterly commitment to finance was to hold cost per call flat. Your product lead has been asking for two weeks of that engineer's time for a feature.</p>
+    </div>
+
+    <div class="steps">
+      <div class="step"><p><strong>Decide, alone, in one line.</strong> Approve or reject. Then write down which number you used to decide, and whether you would have decided differently if the write-up had led with cost per successful task instead of cost per call.</p></div>
+      <div class="step"><p><strong>Do the arithmetic on the delivered work.</strong> At 60% success, 100 attempts deliver 60 finished tasks. At 80% they deliver 80. Work out the change in cost per finished task and say the two verdicts out loud in the same sentence: cost per call up 21%, cost per successful task down. One of those is the sentence finance was actually asking about.</p></div>
+      <div class="step"><p><strong>Find the commitment error.</strong> The promise to hold cost per call flat was made in good faith and it is the actual obstacle here. Draft the one-paragraph renegotiation: what you would commit to instead, and what evidence you would show monthly to prove it. Note that the replacement commitment requires telemetry you may not have yet.</p></div>
+      <div class="step"><p><strong>Now the version with teeth.</strong> Suppose the same two weeks would instead cap runaway loops, cutting cost per call by 15% while task success drops from 60% to 52% because runs that used to succeed on step nine now stop at step five. Cost per call improves. Does anything else? This is the same trap with its sign reversed, and it is the one that gets approved.</p></div>
+    </div>
+
+    <div class="callout warn">
+      <strong>What the drill is teaching</strong>
+      Neither the approve nor the reject answer is the lesson. The lesson is that a cost-per-call commitment made to finance is a technical decision with an incentive built into it, made by people who had no idea they were choosing an incentive - and that you can only renegotiate it if you can produce cost per successful task, sliced by feature, which is a telemetry capability rather than a spreadsheet.
+    </div>
+  </section>
+
+  <!-- ============ EXERCISE 2 ============ -->
+  <section class="section" id="decision-2">
+    <div class="section-kicker">
+      <span class="klabel">Decision drill 2 of 2</span>
+      <h2>The unexplained step change <span class="tag exercise">◐ 7 min · in pairs</span></h2>
+    </div>
+    <p class="lede">A cost investigation with four plausible causes, three of which return no error. Your job is to order the questions, not to guess the answer.</p>
+
+    <div class="callout example">
+      <span class="ex-pill">The situation</span>
+      <p>Input-token spend on your customer-support assistant rose 34% between Tuesday and Wednesday. Request volume is flat. Your dollars-per-token figures are unchanged. In the same week the team shipped a new tool for order lookups, switched the system prompt to include the current timestamp for freshness, moved to a newer model at an identical posted price, and enabled streaming so answers feel faster.</p>
+    </div>
+
+    <div class="steps">
+      <div class="step"><p><strong>Write down the four hypotheses</strong> the four changes suggest, and mark which of them would produce an error, a warning, or any log line at all. You should end up with a very short list in the first column and a long one in the third.</p></div>
+      <div class="step"><p><strong>Name the one measurement that separates most of them.</strong> One chart splits the tokenizer story from the cache-invalidation story immediately, and almost nobody has it on a wall. Say which chart, and say why the dollars-per-token view cannot do it.</p></div>
+      <div class="step"><p><strong>Reason through the streaming change.</strong> Explain to a sceptical colleague how making answers feel faster could raise the input bill. If your explanation does not mention where the TTL clock starts, try again.</p></div>
+      <div class="step"><p><strong>Decide what you fund.</strong> You can have one of: a per-request token chart broken down into the cache quartet, an alert on cache hit rate step changes, or a per-tenant cost attribution project. Pick one, name the incident class it would not have caught, and say who you would tell about that gap before it happens.</p></div>
+    </div>
+
+    <div class="callout tip">
+      <strong>The point of the ordering</strong>
+      Three of the four changes here are cost regressions with no error signal, and two of them were shipped by people improving the product. This is the normal case rather than the pathological one. The reason the cache quartet on the span is such a good first investment is that it distinguishes several of these hypotheses at once, without anyone having to guess which of Wednesday's four deploys to look at first.
+    </div>
+  </section>
+
+  <!-- ============ HOMEWORK ============ -->
+  <section class="section" id="exercise">
+    <div class="section-kicker">
+      <span class="klabel">Homework</span>
+      <h2>Try it yourself - this week <span class="tag exercise">◐ 45-60 min total</span></h2>
+    </div>
+    <ul>
+      <li><strong>Ask for cost per successful task, once, for one feature.</strong> Not per call. If nobody can produce it, you have found the gap this session is about, and the reason is almost always that success is not recorded anywhere as a fact - which makes it an instrumentation ticket rather than a finance request.</li>
+      <li><strong>Ask for cost per failed task alongside it.</strong> This is the number that tells you whether your failures are cheap and fast or expensive and stubborn, and it decides whether reliability work is a cost lever for you or merely a quality one.</li>
+      <li><strong>Check whether you log the quartet.</strong> Cache creation tokens, cache read tokens, <code>input_tokens</code>, and their sum. If your dashboard reads <code>input_tokens</code> alone and you cache long documents, your token numbers are under-reporting by up to about 4000x on your most important request pattern.</li>
+      <li><strong>Find your cache hit rate and plot it as a line.</strong> Then look for step changes and line them up against your deploy history. A drop that coincides with a deploy is almost always a tool definition change or a prefix that started varying, and both are invisible in any error log.</li>
+      <li><strong>Do the tokenizer check.</strong> If you have migrated to a Claude 4.7 or later model, compare tokens per request before and after at fixed traffic. A step of roughly 30% is expected behaviour, not a bug, and it should be written down somewhere before someone spends a week hunting it.</li>
+      <li><strong>Write the c/p line for your own system.</strong> One line: at our current success rate of <em>p</em>, every dollar of delivered work costs <code>1/p</code> dollars of spend. Put the number in the next roadmap conversation and watch how differently reliability work gets discussed when it has a currency attached.</li>
+    </ul>
+  </section>
+
+  <!-- ============ SOURCES ============ -->
+  <section class="section" id="official">
+    <div class="section-kicker">
+      <span class="klabel">Source material</span>
+      <h2>Official sources covered</h2>
+    </div>
+    <p class="lede">Every price, multiplier and mechanism on this page was read from primary vendor documentation on <strong>2026-08-13</strong> and is catalogued in this course's source map. The arithmetic built on top of them is labelled as arithmetic. This page covers:</p>
+    <div class="covered">
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Prompt caching multipliers: 5-minute write 1.25x, 1-hour write 2x, cache read 0.1x of base input</span><span class="note">Part 2 · primary vendor documentation, priced 2026-08-13</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Break-even quoted from the docs: one read at 5 minutes, two reads at 1 hour</span><span class="note">Part 2 · below that you have paid a write premium for nothing</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">The four silent traps: TTL from the start of the writing request with streaming counted, the minimum cacheable prefix of 512 to 4,096 tokens enforced with no error returned, tool definitions invalidating the entire cache, and <code>input_tokens</code> counting only tokens after the last breakpoint</span><span class="note">Part 2 · three of the four return no error at all</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Agent token multipliers: agents about 4x more tokens than chat, multi-agent systems about 15x</span><span class="note">Part 1 · published measurement of Anthropic's own Research feature circa 2025, explicitly not a universal law</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">The tokenizer change: Claude 4.7 and later produce approximately 30% more tokens for the same text</span><span class="note">Part 2 · a ~30% cost increase on identical traffic at an identical posted price</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Line items outside the token dashboard: Batch API 50% off stacking with caching, web search $10 per 1,000 searches, ~125,000 tokens for a 500 kB PDF fetch, code execution 1,550 free container-hours then $0.05/hour and billed when files are attached, <code>inference_geo: "us"</code> at 1.1x, tool-use overhead of 286-804 tokens per request</span><span class="note">Self-study · all read 2026-08-13, all to be re-verified</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Attribution placements: provider-side Workspaces with per-workspace spend and rate limits and a workspace id response header, span attributes on your own telemetry, cache-key affinity</span><span class="note">Part 3 · only the first is enforced, and it is the coarsest</span></div>
+      <div class="covered-row"><span class="status pill light">◐</span><span class="name"><code>E[cost per success] = c / p</code> and the 1.05x / 1.25x / 1.67x / 2.50x / 4.00x table, plus the ~25x composition with the 15x multiplier</span><span class="note">Part 1 · a DERIVATION performed on this page, not a published statistic. Sound arithmetic, nobody's measurement</span></div>
+      <div class="covered-row"><span class="status pill light">◐</span><span class="name">The before-and-after cost-per-call illustration, and the 60% to 80% reliability figure</span><span class="note">Part 1 · a worked illustration with invented inputs, chosen to show the sign flip. The 25% saving holds the price of an attempt constant</span></div>
+      <div class="covered-row"><span class="status pill light">◐</span><span class="name">Token double-counting across <code>invoke_agent</code> and its child inference spans</span><span class="note">Named here · the full trap and the fix are builder session b4</span></div>
+      <div class="covered-row"><span class="status pill light">◐</span><span class="name">Cardinality limits on which cost breakdowns can be a metric at all</span><span class="note">Assumed from leader session a3 · unbounded ids on spans, never as metric labels</span></div>
+      <div class="covered-row"><span class="status pill bare">○</span><span class="name">Per-platform observability vendor pricing</span><span class="note">Not covered · could not be verified beyond one vendor's "volume of spans" basis, so no numbers are quoted. Session a6 handles the platform decision without them</span></div>
+    </div>
+    <p>Three honesty flags to carry out of the room. The 4x and 15x multipliers describe <strong>one production system</strong> - Anthropic's own Research feature, circa 2025 - and are a well-documented order-of-magnitude data point rather than a law of agent design. The <code>c / p</code> table and the ~25x composition are <strong>arithmetic performed here</strong>, and the composition is a floor rather than an estimate, because failed attempts typically cost more than successful ones. And every price, free tier and multiplier above carries the date <strong>2026-08-13</strong> for a documented reason: a scheduled, published price change for 1 September 2026 was subsequently cancelled by the same page that announced it.</p>
+  </section>
+
+  <!-- ============ QUIZ ============ -->
+  <section class="section" id="quiz">
+    <div class="section-kicker">
+      <span class="klabel">Check yourself</span>
+      <h2>Three questions before you go 🎯 <span class="tag exercise">◐ 90 seconds</span></h2>
+    </div>
+    <div class="quiz-q" data-answer="2">
+      <p class="qtext">1 · A fix raises average cost per call by 21% and lowers cost per successful task by 9%. What is going on, and what do you do?</p>
+      <button class="qopt" type="button">A · The two numbers cannot both be right, so send it back for re-measurement</button>
+      <button class="qopt" type="button">B · Reject it. Cost per call is the number finance agreed to, so the fix fails its commitment</button>
+      <button class="qopt" type="button">C · Both are right and you approve it. Short cheap failures were leaving the denominator, so the average rose while the cost of delivered work fell - and a cost-per-call target would have made you reject a fix that gave users 33% more finished work</button>
+      <p class="qwhy">This is the sign error at the heart of the session. Attempts that used to bail out early were cheap, and they were dragging the average down while delivering nothing. Fixing that path replaces cheap failures with full-price successes: the average per call rises, the cost per unit of delivered work falls. A team measured on cost per call learns, entirely rationally, to leave the bug in. The trap also runs in reverse - capping runaway loops can lower cost per call while raising cost per successful task, and that version usually gets approved.</p>
+    </div>
+    <div class="quiz-q" data-answer="0">
+      <p class="qtext">2 · You migrate to a Claude 4.7 or later model at an identical posted price. Traffic is unchanged. What happens, and which chart shows it?</p>
+      <button class="qopt" type="button">A · Spend rises roughly 30%, because the newer tokenizer produces approximately 30% more tokens for the same text - and the chart that moves is tokens per request, not dollars per token</button>
+      <button class="qopt" type="button">B · Nothing changes, because the posted price per token is identical</button>
+      <button class="qopt" type="button">C · Spend falls, because newer models are more efficient per request</button>
+      <p class="qwhy">The price per token really did not change, which is exactly why this is an observability problem rather than a procurement one. Your dollars-per-token dashboard stays flat and correct while the bill grows by about a third. The signal lives in tokens per request, a chart most teams treat as an engineering detail and therefore do not have. It also shifts everything you threshold on token counts - context-headroom warnings, per-tenant quotas, truncation-risk monitors - by roughly 30%, for a reason that is documented behaviour rather than a bug.</p>
+    </div>
+    <div class="quiz-q" data-answer="1">
+      <p class="qtext">3 · Your cost dashboard reads <code>input_tokens</code>. A common request reuses a 200k-token cached document and adds a 50-token question. What is your dashboard telling you?</p>
+      <button class="qopt" type="button">A · Roughly 200,050 tokens, which is correct</button>
+      <button class="qopt" type="button">B · 50 tokens, because <code>input_tokens</code> counts only tokens after the last cache breakpoint - an under-report of about 4000x on that request, which is why you log the quartet: cache creation, cache read, input tokens, and their sum</button>
+      <button class="qopt" type="button">C · 200,000 tokens, since cached reads are still billed as input</button>
+      <p class="qwhy">This one is not a cost bug, it is a measurement bug, and it contaminates every cost investigation you run afterwards. Under-reporting your highest-volume request pattern by a factor of roughly four thousand makes tokens-per-request charts, per-tenant attribution and capacity forecasts all wrong in the same direction, with no error anywhere to indicate it. The cached tokens are billed - at 0.1x on a read - they are simply accounted for in different fields. Log all four numbers or none of them mean anything.</p>
+    </div>
+    <p class="quiz-score"></p>
+  </section>
+
+  <!-- ============ CHEAT SHEET ============ -->
+  <section class="cheat" id="cheatsheet">
+    <h3>Leader session 4 cheat sheet <span>· pin this</span></h3>
+    <div class="grid-2">
+      <div class="cheat-item"><b>The wrong denominator</b><span>Cost per call moves the wrong way. Short cheap failures leave the denominator, so a good fix raises the average while lowering the cost of delivered work. Optimise cost per call and you will reject the fixes that make the product work.</span></div>
+      <div class="cheat-item"><b>c / p - a derivation</b><span><code>E[cost per success] = c / p</code>. 95% gives 1.05x, 80% gives 1.25x, 60% gives 1.67x, 40% gives 2.50x, 25% gives 4.00x. Arithmetic performed here, not a published statistic.</span></div>
+      <div class="cheat-item"><b>The composition</b><span>Agents use about 4x the tokens of chat and multi-agent systems about 15x, measured on one production system circa 2025. At 60% success a multi-agent design costs about 25x per successful task versus chat - and that is a floor, because the failed 40% run long before giving up.</span></div>
+      <div class="cheat-item"><b>Reliability is cost work</b><span>Holding the price of an attempt constant, 60% to 80% task success cuts cost per successful task by 25% with no pricing change at all. Bigger than most negotiated discounts, and invisible on a cost-per-call chart.</span></div>
+      <div class="cheat-item"><b>Caching prices, 2026-08-13</b><span>5-minute write 1.25x, 1-hour write 2x, read 0.1x of base input. Break-even after one read at 5 minutes, two reads at 1 hour. Below that you paid a premium for nothing.</span></div>
+      <div class="cheat-item"><b>The four silent traps</b><span>TTL starts when the writing request starts and streaming counts against it. The minimum prefix (512-4,096 tokens) is enforced with no error returned. Changing a tool definition invalidates the entire cache. <code>input_tokens</code> counts only after the last breakpoint - roughly 4000x under-report on a 200k cached document.</span></div>
+      <div class="cheat-item"><b>The tokenizer trap</b><span>Claude 4.7 and later produce about 30% more tokens for the same text. Migrating at an identical posted price is a ~30% increase on identical traffic. Dollars per token looks fine; tokens per request is the chart that moves.</span></div>
+      <div class="cheat-item"><b>Three places for the key</b><span>Provider-side Workspaces are the only enforced boundary and the coarsest. Span attributes are arbitrarily fine and enforce nothing. Cache-key affinity buys efficiency and attribution at once. Every price you quote carries a date, because a published change for 1 Sep 2026 was cancelled.</span></div>
+    </div>
+  </section>
+
+  <footer class="pagefoot">
+    <span>Leader session 4 of 6 · learn-ai-observability-with-phoebe · by Phoebe Fu &nbsp;·&nbsp; 📚 <a href="https://phoebefu6.github.io/learn-with-phoebe/">Learn with Phoebe ↗</a></span>
+    <span><a href="../index.html">← Course home</a> &nbsp;·&nbsp; <a href="a5-on-call-for-ai.html">Next: On-call for AI →</a></span>
+  </footer>
+
+</main>
+
+<script src="../assets/app.js?v=2"></script>
+</body>
+</html>

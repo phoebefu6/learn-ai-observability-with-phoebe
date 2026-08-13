@@ -1,0 +1,609 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Builder session 3 · Instrumenting an agent - learn ai observability with phoebe</title>
+<link rel="stylesheet" href="../assets/style.css?v=2">
+</head>
+<body>
+
+<div class="toolbar">
+  <div class="wrap">
+    <span class="crumb"><a href="../index.html">learn-ai-observability-with-phoebe</a> / Builder session 3 of 10</span>
+    <button class="btn" id="toggle-all" type="button">Expand all</button>
+    <button class="btn primary" id="zoom-toggle" type="button">Projector zoom: off</button>
+  </div>
+</div>
+
+<header class="masthead">
+  <div class="wrap">
+    <div class="eyebrow">Learn AI Observability with Phoebe · Builder track · Session 3 of 10</div>
+    <h1>Instrumenting an agent: <span class="accent">the loop is width, not depth</span></h1>
+    <p class="sub">Session b2 gave you the names. This session gives you the shape, and the shape carries information that no single attribute does. The spec's nesting rules are specific and slightly counterintuitive: exactly one span type owns its own model call as a child, everything else in an iteration is a sibling, and a handoff between agents is a sibling too. Once you can read that shape you can spot a runaway loop, a mis-parented tool call and a double-counted token bill from the outline of a trace, before you read a single attribute.</p>
+    <div class="chip-row">
+      <span class="chip level">🟡 Builder track</span>
+      <span class="chip audience">AI engineers · platform engineers · technical PMs</span>
+      <span class="chip time">45 min</span>
+    </div>
+    <div class="agenda">
+      <span class="a1" style="flex:1">0-3 · Welcome</span>
+      <span class="a2" style="flex:4">3-18 · The shape and the three reading rules</span>
+      <span class="a3" style="flex:5">18-40 · Build-along: shape, then the counters</span>
+      <span class="a4" style="flex:1">40-45 · Q&amp;A</span>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <!-- ============ INTRO ============ -->
+  <section class="section" id="intro">
+    <div class="section-kicker">
+      <span class="klabel">Part 0</span>
+      <h2>Shape is a signal, and it is free</h2>
+    </div>
+    <p class="lede">Everything b1 and b2 taught is about content: what is in a span, what it is called, which level it sits at. Today is about arrangement. Arrangement is the cheapest signal in your telemetry because you get it whether you want it or not: every span already has a parent, so the tree already exists. The question is whether you built it in a shape that means something, and whether you know how to read it when it does.</p>
+    <div class="legend">
+      <span class="pill solid">Live - presented in session</span>
+      <span class="pill light">Self-study - read after class</span>
+      <span class="pill inkpill">Official sources covered</span>
+    </div>
+    <div class="callout win">
+      <strong>★ What you walk out with today</strong>
+      The spec's four nesting rules stated precisely, the one span type that owns its LLM call as a child, three reading rules you can apply to a trace outline in five seconds, the double-counting trap that inflates every agent cost report, and an honest map of which frameworks anybody actually instruments - including two entry points that were renamed while the public documentation still shows the old ones.
+    </div>
+    <div class="callout warn">
+      <strong>Carried over from b2, and it still applies</strong>
+      Every span, attribute and metric named on this page carries status <code>Development</code>, in a repository with no tags and no releases. The nesting rules below are quoted from the agent span conventions as read on 13 August 2026. The reading rules that follow from them are more durable than the names, because they describe the shape of an agent loop rather than the spelling of it.
+    </div>
+  </section>
+
+  <!-- ============ PART 1 ============ -->
+  <section class="section" id="shape">
+    <div class="section-kicker">
+      <span class="klabel">Part 1 · the shape</span>
+      <h2>Four nesting rules, one of them surprising <span class="tag concept">8 min live</span></h2>
+    </div>
+    <p class="lede">The agent span conventions "extend and override" the base span conventions, which is a polite way of saying that if you learned span structure from a generic tracing tutorial, some of it does not apply here. Four rules, stated as the spec states them.</p>
+
+    <table class="clean">
+      <tr><th>Rule</th><th>What the spec says</th><th>Why it is written that way</th></tr>
+      <tr><td><strong>1 · When not to report a workflow</strong></td><td><code>invoke_workflow</code> <strong>SHOULD NOT</strong> be reported for standalone agent invocations, nor when the workflow is an internal implementation detail</td><td>A wrapper span that always has exactly one child adds a level of nesting and no information. If the workflow is your framework's plumbing rather than your design, it is noise</td></tr>
+      <tr><td><strong>2 · When to report one anyway</strong></td><td>Application-defined workflows <strong>SHOULD</strong> be reported <strong>even when nested</strong>, for example a sub-graph invoked as a node</td><td>The test is authorship, not depth. A workflow you designed is a unit somebody will want to time and compare, so it earns a span even three levels down</td></tr>
+      <tr><td><strong>3 · Plan owns its model call</strong></td><td>The plan-generating LLM call is a <strong>child</strong> of the <code>plan</code> span</td><td><code>plan</code> is the only span type in the conventions that owns an inference span as a child. The plan span exists to measure the act of deciding, and the model call is how the deciding happens</td></tr>
+      <tr><td><strong>4 · The plan's tools are siblings</strong></td><td>The tool and task spans that come out of that plan are <strong>siblings</strong>, under the same <code>invoke_agent</code> span</td><td>The plan produced them; it did not contain them. Nesting execution under the plan would make the plan span's duration include all the work, and you would lose the ability to ask how long deciding took</td></tr>
+    </table>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 395" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="An agent trace: invoke_workflow at the root, invoke_agent under it, a plan span owning its chat span as a child, then tool and chat spans as siblings of plan, and a second invoke_agent as a sibling handoff.">
+        <style>
+          .agW { font: 400 11px ui-monospace, Menlo, monospace; fill: #FFFFFF; }
+          .agD { font: 400 11px ui-monospace, Menlo, monospace; fill: #0C1F3F; }
+          .agH { font: 700 13px Inter, sans-serif; fill: #1B2230; }
+          .agC { font: 400 11px Inter, sans-serif; fill: #08323A; }
+          .agN { font: 400 11px Inter, sans-serif; fill: #66707E; }
+          .agK { font: 600 12.5px Inter, sans-serif; fill: #08323A; }
+        </style>
+
+        <text class="agH" x="24" y="32">One workflow, one agent, three iterations, one handoff</text>
+
+        <line x1="44" y1="72" x2="44" y2="310" stroke="#C7CFDA" stroke-width="1"/>
+        <line x1="72" y1="108" x2="72" y2="274" stroke="#C7CFDA" stroke-width="1"/>
+        <line x1="100" y1="144" x2="100" y2="166" stroke="#C7CFDA" stroke-width="1"/>
+
+        <rect x="24" y="44" width="832" height="28" rx="7" fill="#0C1F3F"/>
+        <text class="agW" x="40" y="63">invoke_workflow beacon.analyst_flow   12.4s</text>
+
+        <rect x="52" y="80" width="560" height="28" rx="7" fill="#16305C"/>
+        <text class="agW" x="68" y="99">invoke_agent analyst_bot   8.4s   3 iterations</text>
+
+        <rect x="80" y="116" width="300" height="28" rx="7" fill="#3F62A8"/>
+        <text class="agW" x="96" y="135">plan analyst_bot   0.9s</text>
+
+        <rect x="108" y="152" width="280" height="28" rx="7" fill="#0891A6"/>
+        <text class="agW" x="124" y="171">chat claude-sonnet-4-5   0.9s</text>
+
+        <rect x="80" y="188" width="300" height="28" rx="7" fill="#AFC0E4"/>
+        <text class="agD" x="96" y="207">execute_tool run_sql   4.1s</text>
+
+        <rect x="80" y="224" width="300" height="28" rx="7" fill="#AFC0E4"/>
+        <text class="agD" x="96" y="243">execute_tool fetch_cache   0.1s</text>
+
+        <rect x="80" y="260" width="300" height="28" rx="7" fill="#0891A6"/>
+        <text class="agW" x="96" y="279">chat claude-sonnet-4-5   1.2s</text>
+
+        <rect x="52" y="296" width="560" height="28" rx="7" fill="#16305C"/>
+        <text class="agW" x="68" y="315">invoke_agent narrator_bot   2.1s</text>
+
+        <rect x="620" y="118" width="236" height="56" rx="10" fill="#E4F6F9" stroke="#0891A6" stroke-width="1.5"/>
+        <text class="agC" x="636" y="138">plan is the ONLY span that</text>
+        <text class="agC" x="636" y="154">owns its LLM call as a</text>
+        <text class="agC" x="636" y="170">child - see the indent.</text>
+
+        <rect x="620" y="190" width="236" height="70" rx="10" fill="#EDF2FB" stroke="#AFC0E4" stroke-width="1.5"/>
+        <text class="agN" x="636" y="210">The tool spans from that</text>
+        <text class="agN" x="636" y="226">plan are SIBLINGS under</text>
+        <text class="agN" x="636" y="242">invoke_agent, not children</text>
+        <text class="agN" x="636" y="258">of plan.</text>
+
+        <rect x="620" y="292" width="236" height="54" rx="10" fill="#EDF2FB" stroke="#AFC0E4" stroke-width="1.5"/>
+        <text class="agN" x="636" y="312">A handoff is a SIBLING</text>
+        <text class="agN" x="636" y="328">invoke_agent under the</text>
+        <text class="agN" x="636" y="344">workflow. Never nested.</text>
+
+        <rect x="24" y="366" width="14" height="14" rx="3" fill="#0891A6"/>
+        <text class="agK" x="48" y="378">Depth encodes ownership. Width encodes iteration. Read them differently.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - the one span that owns its model call, and everything that does not</figcaption>
+    </figure>
+
+    <div class="callout tip">
+      <strong>Why rule 4 is worth more than it looks</strong>
+      Because the tools are siblings of the plan rather than children of it, <code>plan</code> duration is a clean measurement of thinking time, separate from doing time. That gives you a diagnostic almost nobody has: the ratio of deciding to executing across an agent run. An agent spending 0.9 seconds planning and 4.2 executing is a different animal from one spending 6 seconds planning and 0.4 executing, and the second one is usually a prompt problem rather than an infrastructure problem. Nest the tools under the plan and both collapse into one number that means nothing.
+    </div>
+
+    <details class="card" open>
+      <summary><span class="mode live">Live</span>Framework entry points the spec names as workflows<span class="mini">3 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>Rule 1 and rule 2 pull in opposite directions, so the spec grounds the distinction with named examples. These are the framework entry points that map to <code>invoke_workflow</code>:</p>
+        <table class="clean">
+          <tr><th>Framework</th><th>Entry point</th></tr>
+          <tr><td>Google ADK</td><td><code>Runner.run(...)</code></td></tr>
+          <tr><td>CrewAI</td><td><code>Crew.kickoff()</code></td></tr>
+          <tr><td>LangChain / LangGraph</td><td><code>*Graph*.invoke(...)</code></td></tr>
+          <tr><td>Microsoft Agent Framework</td><td><code>Workflow*.run(...)</code></td></tr>
+          <tr><td>OpenAI Agents</td><td><code>Runner.run(starting_agent=...)</code></td></tr>
+        </table>
+        <p>Read that list as a definition rather than a lookup table. What these calls have in common is that <em>you wrote the thing being run</em>: the graph, the crew, the workflow object. That is the authorship test from rule 2. A framework's internal step dispatcher is not on this list even though it is technically also a workflow, because you did not design it and nobody will ever want a p95 of it.</p>
+        <p>The practical version for your own code: if a product manager would recognise the name, it earns an <code>invoke_workflow</code> span. If only the framework maintainers would, it does not.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode self">Self-study</span>What "extend and override" means when you are debugging<span class="mini">2 min read</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>The agent conventions extend and override the base GenAI span conventions, which has one concrete consequence worth internalising: <strong>an <code>invoke_agent</code> span is not just a wrapper, it carries GenAI attributes of its own</strong>, including aggregate usage. That is the source of the double-counting trap in Part 2, and it is also what makes the agent span useful on its own.</p>
+        <p>The mental model that works: <code>invoke_agent</code> is a GenAI span that happens to have GenAI spans underneath it. It is not a generic parent like an HTTP server span. So when you query for spans by <code>gen_ai.provider.name</code>, agent spans come back too, and any naive sum over that result set is wrong. Every aggregate you write over agent telemetry needs to say which level it means.</p>
+      </div>
+    </details>
+  </section>
+
+  <!-- ============ PART 2 ============ -->
+  <section class="section" id="reading">
+    <div class="section-kicker">
+      <span class="klabel">Part 2 · reading the shape</span>
+      <h2>Three rules that fall out of the structure <span class="tag concept">8 min live</span></h2>
+    </div>
+    <p class="lede">This is the heart of the session. Three consequences of the nesting rules, each of which lets you diagnose something real from the outline of a trace. They are not spec text; they are what the spec text implies once you have seen a few hundred agent traces.</p>
+
+    <div class="callout tip">
+      <strong>Rule 1 · The agent loop is width, not depth</strong>
+      Each iteration of an agent loop adds <strong>siblings</strong> under one <code>invoke_agent</code> span. It does not add depth, because nothing nests: the plan, the tools and the model calls all sit at the same level, iteration after iteration. So a deep agent trace usually means composition (workflows, sub-agents, a plan and its call) while a <strong>wide</strong> one means iteration. A forty-child <code>invoke_agent</code> span is not a complex task; it is a loop nobody bounded.
+    </div>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 380" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="A healthy agent span with five children compared with a runaway agent span with nineteen children of the same three types, and the two histogram metrics whose buckets reach 128.">
+        <style>
+          .wdH { font: 700 12.5px Inter, sans-serif; fill: #1B2230; }
+          .wdR { font: 700 12.5px Inter, sans-serif; fill: #991B1B; }
+          .wdS { font: 400 11px Inter, sans-serif; fill: #66707E; }
+          .wdE { font: 400 11px Inter, sans-serif; fill: #991B1B; }
+          .wdW { font: 400 10.5px ui-monospace, Menlo, monospace; fill: #FFFFFF; }
+          .wdT { font: 400 9.5px ui-monospace, Menlo, monospace; fill: #FFFFFF; }
+          .wdM { font: 400 11px ui-monospace, Menlo, monospace; fill: #08323A; }
+          .wdC { font: 400 11px Inter, sans-serif; fill: #08323A; }
+          .wdK { font: 600 12.5px Inter, sans-serif; fill: #08323A; }
+        </style>
+
+        <rect x="24" y="24" width="404" height="214" rx="10" fill="#EDF2FB" stroke="#AFC0E4" stroke-width="1.5"/>
+        <text class="wdH" x="40" y="46">Healthy - 5 children</text>
+        <text class="wdS" x="40" y="62">one plan, two tools, two model calls</text>
+        <rect x="40" y="72" width="372" height="22" rx="6" fill="#16305C"/>
+        <text class="wdW" x="52" y="87">invoke_agent analyst_bot   8.4s</text>
+        <rect x="56" y="102" width="130" height="16" rx="4" fill="#3F62A8"/>
+        <text class="wdT" x="66" y="113">plan</text>
+        <rect x="56" y="124" width="250" height="16" rx="4" fill="#3F62A8"/>
+        <text class="wdT" x="66" y="135">execute_tool run_sql</text>
+        <rect x="56" y="146" width="140" height="16" rx="4" fill="#3F62A8"/>
+        <text class="wdT" x="66" y="157">chat</text>
+        <rect x="56" y="168" width="240" height="16" rx="4" fill="#3F62A8"/>
+        <text class="wdT" x="66" y="179">execute_tool render</text>
+        <rect x="56" y="190" width="140" height="16" rx="4" fill="#3F62A8"/>
+        <text class="wdT" x="66" y="201">chat</text>
+
+        <rect x="452" y="24" width="404" height="214" rx="10" fill="#FEF2F2" stroke="#FCA5A5" stroke-width="1.5"/>
+        <text class="wdR" x="468" y="46">Runaway - 19 children</text>
+        <text class="wdE" x="468" y="62">the same three span types, over and over</text>
+        <rect x="468" y="72" width="372" height="22" rx="6" fill="#0C1F3F"/>
+        <text class="wdW" x="480" y="87">invoke_agent analyst_bot   184.2s</text>
+        <rect x="484" y="102" width="120" height="5" rx="2" fill="#3F62A8"/>
+        <rect x="484" y="109" width="230" height="5" rx="2" fill="#3F62A8"/>
+        <rect x="484" y="116" width="130" height="5" rx="2" fill="#3F62A8"/>
+        <rect x="484" y="123" width="120" height="5" rx="2" fill="#3F62A8"/>
+        <rect x="484" y="130" width="230" height="5" rx="2" fill="#3F62A8"/>
+        <rect x="484" y="137" width="130" height="5" rx="2" fill="#3F62A8"/>
+        <rect x="484" y="144" width="120" height="5" rx="2" fill="#3F62A8"/>
+        <rect x="484" y="151" width="230" height="5" rx="2" fill="#3F62A8"/>
+        <rect x="484" y="158" width="130" height="5" rx="2" fill="#3F62A8"/>
+        <rect x="484" y="165" width="120" height="5" rx="2" fill="#3F62A8"/>
+        <rect x="484" y="172" width="230" height="5" rx="2" fill="#3F62A8"/>
+        <rect x="484" y="179" width="130" height="5" rx="2" fill="#3F62A8"/>
+        <rect x="484" y="186" width="120" height="5" rx="2" fill="#3F62A8"/>
+        <rect x="484" y="193" width="230" height="5" rx="2" fill="#3F62A8"/>
+        <rect x="484" y="200" width="130" height="5" rx="2" fill="#3F62A8"/>
+        <rect x="484" y="207" width="120" height="5" rx="2" fill="#3F62A8"/>
+        <rect x="484" y="214" width="230" height="5" rx="2" fill="#3F62A8"/>
+        <rect x="484" y="221" width="130" height="5" rx="2" fill="#3F62A8"/>
+        <rect x="484" y="228" width="120" height="5" rx="2" fill="#3F62A8"/>
+
+        <rect x="24" y="254" width="832" height="76" rx="10" fill="#E4F6F9" stroke="#0891A6" stroke-width="1.5"/>
+        <text class="wdM" x="40" y="276">gen_ai.invoke_agent.inference_calls   and   gen_ai.invoke_agent.tool_calls</text>
+        <text class="wdC" x="40" y="296">Histogram buckets: 1 · 2 · 4 · 8 · 16 · 32 · 64 · 128. The top bucket exists because</text>
+        <text class="wdC" x="40" y="314">runaway loops happen. A trace at bucket 128 is visible on a dashboard, unopened.</text>
+
+        <rect x="24" y="350" width="14" height="14" rx="3" fill="#0891A6"/>
+        <text class="wdK" x="48" y="362">Same span types, more of them. That is the signature, and it is countable.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - width is the runaway signature, and two histograms make it visible without opening a trace</figcaption>
+    </figure>
+
+    <p>The two counters from b2's metric table exist for exactly this: <code>gen_ai.invoke_agent.inference_calls</code> and <code>gen_ai.invoke_agent.tool_calls</code>, both histograms, both bucketed 1, 2, 4, 8, 16, 32, 64, 128. Nobody chooses a 128 bucket for a system they expect to behave. Emit those two and a runaway becomes a dashboard shape rather than an archaeology exercise.</p>
+
+    <div class="callout tip">
+      <strong>Rule 2 · Handoffs are sibling agent spans, not nested ones</strong>
+      When agent A hands off to agent B, you get two <code>invoke_agent</code> spans side by side under the workflow. B is not inside A. This matters because the intuition runs the other way - a handoff feels like delegation, and delegation feels like nesting - and the shape you look for when debugging depends on getting it right. Nested agent spans mean a sub-agent invoked as a tool. Sibling agent spans mean control passed on. Two different designs, two different failure modes, and one of them makes the workflow span the only place the whole conversation exists.
+    </div>
+
+    <div class="callout warn">
+      <strong>Rule 3 · Token attribution double-counts by design</strong>
+      <code>invoke_agent</code> carries aggregate <code>gen_ai.usage.*</code> for the whole agent run, <strong>and</strong> each child <code>chat</code> span carries its own. Both are correct. Neither is redundant. And a query that sums <code>gen_ai.usage.input_tokens</code> across every span in the trace returns roughly double the truth. <strong>Sum at one level only.</strong> This is b4's central trap and it is worth meeting today, because the wrong number is plausible, stable and confidently wrong.
+    </div>
+
+    <details class="card" open>
+      <summary><span class="mode live">Live</span>The double-count, with the arithmetic done<span class="mini">4 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>One Analyst Bot run, three model calls. Here is what the trace actually contains.</p>
+        <table class="clean">
+          <tr><th>Span</th><th>Level</th><th><code>gen_ai.usage.input_tokens</code></th><th><code>gen_ai.usage.output_tokens</code></th></tr>
+          <tr><td><code>invoke_agent analyst_bot</code></td><td>Aggregate</td><td>8,400</td><td>1,150</td></tr>
+          <tr><td><code>chat</code> under <code>plan</code></td><td>Leaf</td><td>2,100</td><td>300</td></tr>
+          <tr><td><code>chat</code>, iteration 2</td><td>Leaf</td><td>3,000</td><td>350</td></tr>
+          <tr><td><code>chat</code>, iteration 3</td><td>Leaf</td><td>3,300</td><td>500</td></tr>
+          <tr><td><strong>Sum of leaves</strong></td><td></td><td><strong>8,400</strong></td><td><strong>1,150</strong></td></tr>
+          <tr><td><strong>Naive sum of every span</strong></td><td></td><td><strong>16,800</strong></td><td><strong>2,300</strong></td></tr>
+        </table>
+        <p>Exactly twice. Which is the tell, and also the reason nobody catches it: a clean 2x looks like a pricing tier, a currency mistake or a doubled traffic estimate long before it looks like a query bug. And it will not always be 2x - the multiple depends on how many levels aggregate, so a workflow with two agents summed naively is worse.</p>
+        <p>Two defensible ways to fix it, and you must pick one and write it down:</p>
+        <ul>
+          <li><strong>Sum the leaves.</strong> Filter to spans with <code>gen_ai.operation.name = "chat"</code> (or your other inference operations) and sum those. Precise, and it survives new agent levels being added above.</li>
+          <li><strong>Read the aggregate.</strong> Take <code>gen_ai.usage.*</code> off the top <code>invoke_agent</code> span and ignore everything below. Cheaper, and it breaks quietly the day a sibling agent span appears next to it.</li>
+        </ul>
+        <p>What you must not do is leave it undecided per dashboard, which is the normal state of affairs. Two dashboards, two levels, two token totals, and one very long meeting.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode self">Self-study</span>Reading a trace outline in five seconds<span class="mini">2 min read</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>A drill worth practising, because it turns the three rules into a reflex. Collapse the trace to just its outline and ask three questions in order:</p>
+        <ul>
+          <li><strong>How wide is the widest agent span?</strong> Five to ten children is a working loop. Forty is a bug. If your framework does not bound iterations, this is the number that tells you nobody is.</li>
+          <li><strong>How many <code>invoke_agent</code> spans are there, and are any nested?</strong> Siblings mean handoffs. Nesting means an agent is being used as a tool. Both are legitimate designs; only one of them matches what the team thinks they built, and that mismatch is worth finding on a quiet afternoon.</li>
+          <li><strong>Is there exactly one inference span under each <code>plan</code>?</strong> Two means somebody nested the execution under the plan and your thinking-versus-doing split is gone. Zero means the plan span is decorative.</li>
+        </ul>
+        <p>None of that requires reading an attribute, opening a payload or knowing what the agent was asked. It is available from the outline alone, which is why it survives sampling, redaction and a content-off privacy posture.</p>
+      </div>
+    </details>
+  </section>
+
+  <!-- ============ PART 3 ============ -->
+  <section class="section" id="frameworks">
+    <div class="section-kicker">
+      <span class="klabel">Part 3 · who actually instruments this</span>
+      <h2>The framework reality, and two renamed entry points <span class="tag concept">7 min live</span></h2>
+    </div>
+    <p class="lede">Everything above assumes something is emitting these spans. Here is the uncomfortable part: upstream OpenTelemetry ships GenAI instrumentation for four things, and the frameworks most teams are actually using are not among them. Third parties fill the gap, which means the dialect and the shape of your agent traces are decided by which package you pip installed.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 415" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Coverage matrix: upstream OpenTelemetry ships four GenAI instrumentations and covers none of Anthropic, LangChain, LlamaIndex or the agent frameworks; OpenInference and OpenLLMetry fill the gap, and only OpenLLMetry covers vector stores.">
+        <style>
+          .fmH { font: 700 11px Inter, sans-serif; fill: #FFFFFF; }
+          .fmN { font: 600 12px Inter, sans-serif; fill: #1B2230; }
+          .fmY { font: 700 12px Inter, sans-serif; fill: #16305C; }
+          .fmX { font: 700 12px Inter, sans-serif; fill: #991B1B; }
+          .fmP { font: 400 12px Inter, sans-serif; fill: #66707E; }
+          .fmA { font: 700 12.5px Inter, sans-serif; fill: #991B1B; }
+          .fmM { font: 400 11px ui-monospace, Menlo, monospace; fill: #991B1B; }
+          .fmB { font: 700 12.5px Inter, sans-serif; fill: #08323A; }
+          .fmC { font: 400 11px Inter, sans-serif; fill: #08323A; }
+        </style>
+
+        <rect x="24" y="24" width="832" height="30" rx="6" fill="#0C1F3F"/>
+        <text class="fmH" x="40" y="44">Framework</text>
+        <text class="fmH" x="467" y="44" text-anchor="middle">Upstream OTel</text>
+        <text class="fmH" x="622" y="44" text-anchor="middle">OpenInference</text>
+        <text class="fmH" x="778" y="44" text-anchor="middle">OpenLLMetry</text>
+
+        <rect x="24" y="54" width="832" height="30" fill="#EDF2FB"/>
+        <text class="fmN" x="40" y="74">OpenAI SDK / Agents SDK</text>
+        <text class="fmY" x="467" y="74" text-anchor="middle">yes</text>
+        <text class="fmY" x="622" y="74" text-anchor="middle">yes</text>
+        <text class="fmY" x="778" y="74" text-anchor="middle">yes</text>
+
+        <rect x="24" y="84" width="832" height="30" fill="#FFFFFF"/>
+        <text class="fmN" x="40" y="104">Anthropic SDK</text>
+        <text class="fmX" x="467" y="104" text-anchor="middle">no</text>
+        <text class="fmY" x="622" y="104" text-anchor="middle">yes</text>
+        <text class="fmY" x="778" y="104" text-anchor="middle">yes</text>
+
+        <rect x="24" y="114" width="832" height="30" fill="#EDF2FB"/>
+        <text class="fmN" x="40" y="134">Claude Agent SDK</text>
+        <text class="fmX" x="467" y="134" text-anchor="middle">no</text>
+        <text class="fmY" x="622" y="134" text-anchor="middle">yes</text>
+        <text class="fmX" x="778" y="134" text-anchor="middle">no</text>
+
+        <rect x="24" y="144" width="832" height="30" fill="#FFFFFF"/>
+        <text class="fmN" x="40" y="164">LangChain / LangGraph</text>
+        <text class="fmX" x="467" y="164" text-anchor="middle">no</text>
+        <text class="fmY" x="622" y="164" text-anchor="middle">yes</text>
+        <text class="fmY" x="778" y="164" text-anchor="middle">yes</text>
+
+        <rect x="24" y="174" width="832" height="30" fill="#EDF2FB"/>
+        <text class="fmN" x="40" y="194">LlamaIndex</text>
+        <text class="fmX" x="467" y="194" text-anchor="middle">no</text>
+        <text class="fmY" x="622" y="194" text-anchor="middle">yes</text>
+        <text class="fmY" x="778" y="194" text-anchor="middle">yes</text>
+
+        <rect x="24" y="204" width="832" height="30" fill="#FFFFFF"/>
+        <text class="fmN" x="40" y="224">CrewAI, AutoGen, DSPy, Haystack, Google ADK</text>
+        <text class="fmX" x="467" y="224" text-anchor="middle">no</text>
+        <text class="fmY" x="622" y="224" text-anchor="middle">yes</text>
+        <text class="fmP" x="778" y="224" text-anchor="middle">partial</text>
+
+        <rect x="24" y="234" width="832" height="30" fill="#EDF2FB"/>
+        <text class="fmN" x="40" y="254">Vector stores (Pinecone, Chroma, Qdrant)</text>
+        <text class="fmX" x="467" y="254" text-anchor="middle">no</text>
+        <text class="fmX" x="622" y="254" text-anchor="middle">no</text>
+        <text class="fmY" x="778" y="254" text-anchor="middle">yes</text>
+
+        <line x1="390" y1="24" x2="390" y2="264" stroke="#C7CFDA" stroke-width="1"/>
+        <line x1="545" y1="54" x2="545" y2="264" stroke="#C7CFDA" stroke-width="1"/>
+        <line x1="700" y1="54" x2="700" y2="264" stroke="#C7CFDA" stroke-width="1"/>
+
+        <rect x="24" y="280" width="832" height="54" rx="10" fill="#FEF2F2" stroke="#FCA5A5" stroke-width="1.5"/>
+        <text class="fmA" x="40" y="302">Upstream OTel ships exactly four GenAI instrumentations.</text>
+        <text class="fmM" x="40" y="320">google-genai   openai-v2   openai-agents-v2   vertexai</text>
+
+        <rect x="24" y="346" width="832" height="54" rx="10" fill="#E4F6F9" stroke="#0891A6" stroke-width="1.5"/>
+        <text class="fmB" x="40" y="368">Everything else in the table is a third party keeping up with a moving spec.</text>
+        <text class="fmC" x="40" y="386">Which means the attribute names you get depend on which package you installed.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - four upstream instrumentations, and who covers the rest</figcaption>
+    </figure>
+
+    <p>Two details from that matrix are worth stating out loud. <strong>OpenInference ships 37 packages and OpenLLMetry around 33</strong>, which is the actual reason both exist: the spec moves faster than upstream contrib can follow, and somebody has to ship. And <strong>only OpenLLMetry covers vector stores</strong>. Given that b1's whole thesis is that retrieval is where the incident lives, notice that the layer most likely to break is the layer with the narrowest instrumentation coverage in the entire ecosystem.</p>
+
+    <details class="card" open>
+      <summary><span class="mode live">Live</span>LangChain: the case where the source beats the docs<span class="mini">4 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>This is a small correction with a large lesson attached. If you follow LangSmith's public documentation you will set <code>OTEL_ENABLED</code> or <code>LANGSMITH_OTEL_ENABLED</code>. Those are now <strong>legacy</strong>. The current control is <strong><code>LANGSMITH_TRACING_MODE</code></strong>, and you only find that out by reading <code>client.py</code>.</p>
+        <div class="prompt-box good">
+          <span class="label">★ Precedence, from _resolve_tracing_mode in the Python SDK</span>
+          <p>explicit tracing_mode argument
+  >  deprecated otel_enabled argument
+  >  LANGSMITH_TRACING_MODE  environment variable
+  >  legacy OTEL_ENABLED / OTEL_ONLY
+  >  default "langsmith"
+
+Python modes:  langsmith  |  otel  |  hybrid
+JS modes:      langsmith  |  otel            (no hybrid)
+
+Legacy LANGSMITH_OTEL_ENABLED, if truthy, maps to "hybrid" in Python.</p>
+        </div>
+        <p>Three things follow. First, <strong>Python has three modes and JavaScript has two</strong>: there is no <code>hybrid</code> in JS, so a polyglot team cannot assume the same configuration means the same thing on both sides. Second, the legacy variable does not map to <code>otel</code> as most people assume; it maps to <code>hybrid</code>, so a team that thinks it switched to OTLP is in fact still double-emitting to LangSmith. Third, and most useful: <strong>the public docs still show only the legacy variables</strong>.</p>
+        <p>That third point is the lesson, and it is worth more than the variable name. When telemetry configuration does not behave the way the documentation says, read the source that resolves it. It is usually one function, it is usually named something like <code>_resolve_*</code>, and it is always the truth.</p>
+      </div>
+    </details>
+
+    <details class="card" open>
+      <summary><span class="mode live">Live</span>Vercel AI SDK: the same lesson, second time<span class="mini">3 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>If the LangChain example felt like a one-off, here is the same shape from a completely different project. The Vercel AI SDK renamed its telemetry entry point.</p>
+        <div class="prompt-box good">
+          <span class="label">★ Current, and what it replaced</span>
+          <p>// current
+import { registerTelemetry, OpenTelemetry } from "@ai-sdk/otel";
+registerTelemetry(new OpenTelemetry());
+
+// experimental_telemetry is no longer in the docs
+// the old ai.* span names (ai.generateText, ai.streamText, ai.toolCall)
+// are now LegacyOpenTelemetry</p>
+        </div>
+        <p>The consequence is the same in kind and different in flavour. Here the <strong>span names moved too</strong>, so a dashboard built on <code>ai.generateText</code> does not error, it just goes quiet, which is the worst way for a rename to reach you. And the migration is not only a code change: anything downstream that matched on <code>ai.*</code> needs rewriting.</p>
+        <p>Two renamed entry points in two unrelated projects, both with documentation lagging behind the source, is not bad luck. It is what a fast-moving ecosystem looks like from the inside. The habit worth building: pin your instrumentation versions, read the changelog of the instrumentation and not only of the model SDK, and keep one canary dashboard whose whole job is to go blank when span names change.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode self">Self-study</span>Auto or manual, and the answer that is actually both<span class="mini">3 min read</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>The question people arrive with is auto-instrumentation or manual. The answer that holds up is: auto for the model and tool calls, manual for the shape and for everything the SDK cannot see.</p>
+        <table class="clean">
+          <tr><th></th><th>What you get</th><th>What it will not do</th></tr>
+          <tr><td><strong>Auto</strong></td><td>Inference spans with correct names and attributes, tool spans where the framework knows about tools, token counts, and the dialect the package chose</td><td>Know which of your workflows is application-defined, know your own cache and warehouse calls exist, or decide anything about privacy on your behalf beyond its own default</td></tr>
+          <tr><td><strong>Manual</strong></td><td>The workflow and agent boundaries you designed, the spans around retrieval, caching and database calls, error status on your own failure paths, the retry counter, tenant and conversation ids</td><td>Keep up with provider SDK changes, which is a real maintenance cost and the honest argument for auto</td></tr>
+        </table>
+        <p>The division of labour that works in practice: let the package instrument the calls it wraps, and write manual spans for every boundary that exists in your design rather than in your dependencies. b1's incident lived entirely in the second category - the warehouse timeout and the stale cache read were both yours to instrument, and no package was ever going to do it for you.</p>
+      </div>
+    </details>
+  </section>
+
+  <!-- ============ DEMO 1 ============ -->
+  <section class="section" id="demo-1">
+    <div class="section-kicker">
+      <span class="klabel">Demo 1 of 2</span>
+      <h2>Give the Beacon Analyst Bot its shape <span class="tag demo">★ 12 min · everyone builds</span></h2>
+    </div>
+    <p class="lede">The Analyst Bot turns an executive question into a warehouse query and a written answer. It currently emits three flat inference spans under an HTTP server span, which is what auto-instrumentation alone produces. We are going to give it the shape from Part 1, and the point of doing it by hand is that the nesting decisions become visible as decisions.</p>
+
+    <div class="steps">
+      <div class="step"><p>Start with the workflow question, and be willing to answer no. Is <code>beacon.analyst_flow</code> something you designed and would name in a status update, or is it your framework's dispatcher? If it is yours, it gets an <code>invoke_workflow</code> span named <code>invoke_workflow beacon.analyst_flow</code>. If the answer is that there is only ever one agent under it, the spec says SHOULD NOT and you skip it.</p></div>
+      <div class="step"><p>Open <code>invoke_agent analyst_bot</code> for the whole agent run, including all iterations. One span, however many times the loop goes round. Set <code>gen_ai.operation.name</code> to <code>invoke_agent</code> and <code>gen_ai.agent.name</code> to the agent name, and remember this span carries GenAI attributes of its own.</p></div>
+      <div class="step"><p>For each iteration, open <code>plan analyst_bot</code> and put <strong>the plan-generating model call inside it</strong> as a child. This is the only nesting of an inference span in the entire session. Everything you learn about thinking time comes from getting this one right.</p></div>
+      <div class="step"><p>Now close the plan span <strong>before</strong> you execute anything it decided. The tool spans go under <code>invoke_agent</code> as siblings of the plan, not under the plan. If you find yourself keeping the plan span open to parent the tools, you have the shape wrong and your plan duration is about to become meaningless.</p></div>
+      <div class="step"><p>Add the spans no package will add for you: the warehouse query and the cache read. In b1's incident those two were the whole diagnosis and neither is a GenAI span, so neither is anyone's auto-instrumentation problem but yours.</p></div>
+      <div class="step"><p>Now render the trace and count the levels. Workflow, agent, plan, the plan's model call: four deep at most, and wide in the middle. If your trace is six levels deep, something is nested that should be a sibling - go and find it.</p></div>
+    </div>
+
+    <div class="prompt-box good">
+      <span class="label">★ The shape - note where the plan span closes</span>
+      <p>with tracer.start_as_current_span("invoke_workflow beacon.analyst_flow"):
+    with tracer.start_as_current_span("invoke_agent analyst_bot") as agent:
+        for _ in range(max_iterations):
+
+            # plan owns its model call - the only nesting like this
+            with tracer.start_as_current_span("plan analyst_bot"):
+                with tracer.start_as_current_span(f"chat {model}"):
+                    step = decide_next_step()
+            # plan span is now CLOSED - thinking time is measured
+
+            # siblings of plan, children of invoke_agent
+            with tracer.start_as_current_span(f"execute_tool {step.tool}"):
+                run(step)</p>
+    </div>
+
+    <div class="callout warn">
+      <strong>The mistake this demo exists to prevent</strong>
+      Keeping the plan span open as a convenient parent for the work it scheduled. It is the natural thing to write, the indentation is tidier, and it destroys the one measurement the plan span was for: how long deciding took, separately from doing. You will not notice, because the trace still renders, the durations still add up and the totals are still right. Only the ratio is gone, and the ratio is the diagnostic.
+    </div>
+  </section>
+
+  <!-- ============ DEMO 2 ============ -->
+  <section class="section" id="demo-2">
+    <div class="section-kicker">
+      <span class="klabel">Demo 2 of 2</span>
+      <h2>Make a runaway visible without opening a trace <span class="tag demo">★ 10 min · everyone builds</span></h2>
+    </div>
+    <p class="lede">Beacon's Insight Bot has run away twice this quarter and both times somebody found it by noticing the bill. Traces would have shown it immediately, but nobody opens a trace for a request that returned an answer. Two histograms fix that, and one query decision keeps the cost number honest.</p>
+
+    <div class="steps">
+      <div class="step"><p>Record <code>gen_ai.invoke_agent.inference_calls</code> and <code>gen_ai.invoke_agent.tool_calls</code> once per agent run, when the <code>invoke_agent</code> span closes. Count the children you opened; that is the whole implementation. Both are histograms with buckets 1, 2, 4, 8, 16, 32, 64, 128.</p></div>
+      <div class="step"><p>Also record <code>gen_ai.invoke_agent.duration</code>, buckets 0.1 up to 409.6 seconds. Duration and call count together separate the two runaway flavours: many fast calls is a loop, few slow calls is a backend problem, and one metric alone cannot tell you which.</p></div>
+      <div class="step"><p>Keep the metric labels bounded. Agent name, model, provider, operation. <strong>No conversation id, no response id, no tool call id, no user id</strong> - that is the spec's own guardrail and b7 does the arithmetic on why. Unbounded on a span is fine; unbounded as a metric label is a bill.</p></div>
+      <div class="step"><p>Now pick your token-summing level and write it into the query, with a comment saying why. Either filter to inference operations and sum the leaves, or read the aggregate off the top <code>invoke_agent</code> span. Not both. The 2x error is invisible until somebody compares your dashboard to an invoice.</p></div>
+      <div class="step"><p>Prove the double-count to yourself before you trust the fix. Run the same query twice, once unfiltered and once filtered to the leaves, and look at the ratio. Seeing a clean 2x in your own data is the thing that makes this stick.</p></div>
+      <div class="step"><p>Finally, set a bound in the code, not only in the dashboard. Telemetry makes a runaway visible; a maximum iteration count makes it survivable. b8 turns the histogram into an alert, but the alert is a worse fix than the cap.</p></div>
+    </div>
+
+    <div class="prompt-box good">
+      <span class="label">★ Two counters, and a query that does not double-count</span>
+      <p># when the invoke_agent span closes
+inference_calls.record(n_chat_spans, {"gen_ai.agent.name": name})
+tool_calls.record(n_tool_spans,     {"gen_ai.agent.name": name})
+# bounded labels only - no conversation id, no user id, no tool call id
+
+# token cost, summed at ONE level: the leaves
+#   WHERE gen_ai.operation.name = 'chat'
+#   SUM(gen_ai.usage.input_tokens)
+# the aggregate on invoke_agent is the same number. Adding both doubles it.</p>
+    </div>
+
+    <div class="callout tip">
+      <strong>Why a metric beats a trace here</strong>
+      A runaway loop is a property of a whole trace, so no single span looks wrong and nothing errors. You cannot find it by sampling spans and you will not find it by browsing, because the request succeeded. A histogram over call counts turns a shape into a number, and a number can have a threshold. That is the general pattern worth carrying: when the failure is structural, count the structure.
+    </div>
+  </section>
+
+  <!-- ============ HOMEWORK ============ -->
+  <section class="section" id="exercise">
+    <div class="section-kicker">
+      <span class="klabel">Homework</span>
+      <h2>Try it yourself - this week <span class="tag exercise">◐ 45-60 min total</span></h2>
+    </div>
+    <ul>
+      <li>Take your widest agent trace from the last month and count the children of the busiest <code>invoke_agent</code> span. Then find the p99 of that number across a week. If you cannot compute it because nobody emits the call-count histograms, that is the homework: emit them.</li>
+      <li>Run the double-count experiment on your own data. Sum <code>gen_ai.usage.input_tokens</code> across all spans in a trace, then across inference spans only, and write the ratio in your team's runbook next to the query you have decided is correct.</li>
+      <li>Check whether your plan spans, if you have them, close before execution starts. If they do not, fix one agent and compare the before and after plan duration. The difference is the size of the measurement you were missing.</li>
+      <li>Find out which package instruments your main framework, and which dialect it emits. Then find its version in your lock file and go read its changelog rather than the model SDK's. Most teams have never done this and it takes ten minutes.</li>
+      <li>Check your LangChain or LangSmith configuration against the precedence chain in Part 3. If you set <code>LANGSMITH_OTEL_ENABLED</code> expecting OTLP only, you are in <code>hybrid</code> and double-emitting. If you run both Python and JavaScript, confirm the modes match, remembering there is no <code>hybrid</code> in JS.</li>
+      <li>Grep your dashboards and alerts for <code>ai.generateText</code>, <code>ai.streamText</code> and <code>ai.toolCall</code>. Anything you find is either already silent or about to be.</li>
+    </ul>
+  </section>
+
+  <!-- ============ SOURCES ============ -->
+  <section class="section" id="official">
+    <div class="section-kicker">
+      <span class="klabel">Source material</span>
+      <h2>Official sources covered</h2>
+    </div>
+    <p class="lede">The nesting rules are quoted from the GenAI agent span conventions; the framework coverage was read from the upstream contrib repository and the two third-party projects; the two renamed entry points were read from source rather than documentation, which is the point of including them. All verified 13 August 2026.</p>
+    <div class="covered">
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Agent span conventions: when <code>invoke_workflow</code> SHOULD NOT and SHOULD be reported, and "extend and override" over the base span conventions</span><span class="note">Part 1 · rules 1 and 2, with the authorship test</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name"><code>plan</code> owns its LLM call as a child; the tool and task spans from that plan are siblings under the same <code>invoke_agent</code></span><span class="note">Part 1 · rules 3 and 4, and Demo 1 builds it</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Named framework entry points that map to <code>invoke_workflow</code>: ADK, CrewAI, LangChain/LangGraph, Microsoft Agent Framework, OpenAI Agents</span><span class="note">Part 1 · read as a definition, not a lookup</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name"><code>gen_ai.invoke_agent.inference_calls</code> and <code>gen_ai.invoke_agent.tool_calls</code>, buckets to 128, and the identifiers every metric attribute set excludes</span><span class="note">Part 2 and Demo 2 · alerted on in b8</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Upstream OTel ships four GenAI instrumentations: google-genai, openai-v2, openai-agents-v2, vertexai. Nothing for Anthropic, LangChain, LangGraph or LlamaIndex</span><span class="note">Part 3 · with the OpenInference and OpenLLMetry coverage matrix</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name"><code>LANGSMITH_TRACING_MODE</code> and the resolution order from the Python SDK source, three modes in Python and two in JS, legacy variable mapping to hybrid</span><span class="note">Part 3 · source beats docs, first case</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Vercel AI SDK: <code>registerTelemetry(new OpenTelemetry())</code> from <code>@ai-sdk/otel</code>, <code>experimental_telemetry</code> gone from the docs, old <code>ai.*</code> names now LegacyOpenTelemetry</span><span class="note">Part 3 · source beats docs, second case</span></div>
+      <div class="covered-row"><span class="status pill light">◐</span><span class="name">Token attribution and the cost model built on it</span><span class="note">The double-count is set up here · b4 does the money, caching and latency decomposition</span></div>
+      <div class="covered-row"><span class="status pill light">◐</span><span class="name">The failure taxonomy behind runaway loops, step repetition and unbounded termination</span><span class="note">Shape named here · b6 has the empirical taxonomy</span></div>
+      <div class="covered-row"><span class="status pill light">◐</span><span class="name">Tail sampling by span count, which catches a runaway by shape</span><span class="note">Motivated here · b7 configures it, including the <code>decision_wait</code> trap</span></div>
+    </div>
+  </section>
+
+  <!-- ============ QUIZ ============ -->
+  <section class="section" id="quiz">
+    <div class="section-kicker">
+      <span class="klabel">Check yourself</span>
+      <h2>Three questions before you go 🎯 <span class="tag exercise">◐ 90 seconds</span></h2>
+    </div>
+    <div class="quiz-q" data-answer="1">
+      <p class="qtext">1 · An agent plans, then calls two tools based on that plan. What is the correct parentage of the two tool spans?</p>
+      <button class="qopt" type="button">A · Children of the <code>plan</code> span, since the plan is what caused them</button>
+      <button class="qopt" type="button">B · Siblings of the <code>plan</code> span, under the same <code>invoke_agent</code> - the plan produced them but does not contain them, which keeps plan duration a clean measure of thinking time</button>
+      <button class="qopt" type="button">C · Children of the <code>chat</code> span inside the plan, since that call chose the tools</button>
+      <p class="qwhy">Causation is not containment, and this is the one place the spec's answer runs against intuition. The <code>plan</code> span owns exactly one child, its own model call, and nothing else. Nest the tools under it and the plan span's duration silently becomes the duration of the whole iteration, so you lose the ratio of deciding to executing while everything still renders and every total still adds up correctly.</p>
+    </div>
+    <div class="quiz-q" data-answer="2">
+      <p class="qtext">2 · You sum <code>gen_ai.usage.input_tokens</code> across every span in an agent trace and get a number roughly twice what the invoice suggests. What happened?</p>
+      <button class="qopt" type="button">A · Retries are being counted as separate spans and doubling the total</button>
+      <button class="qopt" type="button">B · The provider is billing cached tokens twice</button>
+      <button class="qopt" type="button">C · <code>invoke_agent</code> carries aggregate usage for the whole run and each child inference span carries its own, so summing across levels double-counts by design. Sum at one level only</button>
+      <p class="qwhy">Both numbers are correct and neither is redundant, which is why this survives code review. A clean 2x reads like a pricing or currency mistake long before it reads like a level error. Option A is the plausible distractor and is wrong for a reason from b2: one span covers the whole logical operation including automatic retries, so retries do not add spans at all.</p>
+    </div>
+    <div class="quiz-q" data-answer="0">
+      <p class="qtext">3 · You want to instrument a LangGraph agent calling Claude through the Anthropic SDK. What does upstream OpenTelemetry give you?</p>
+      <button class="qopt" type="button">A · Nothing for either - upstream ships four GenAI instrumentations (google-genai, openai-v2, openai-agents-v2, vertexai) and neither Anthropic nor LangChain or LangGraph is among them, so a third-party package decides your dialect and your shape</button>
+      <button class="qopt" type="button">B · The Anthropic spans, since the model SDK is the part upstream always covers</button>
+      <button class="qopt" type="button">C · The LangGraph structure, with the model calls left to you</button>
+      <p class="qwhy">This is the most common wrong assumption in the whole session, and b1's asymmetry is the reason it feels wrong: auto-instrumentation usually does give you the model calls for free. It does, but from OpenInference or OpenLLMetry rather than from upstream, and that choice comes with a dialect, a set of span kinds, a version policy and a default privacy posture. Note also the sharpest line in the matrix: vector stores are covered by exactly one of the three, and retrieval is where b1's incident lived.</p>
+    </div>
+    <p class="quiz-score"></p>
+  </section>
+
+  <!-- ============ CHEAT SHEET ============ -->
+  <section class="cheat" id="cheatsheet">
+    <h3>Builder session 3 cheat sheet <span>· pin this</span></h3>
+    <div class="grid-2">
+      <div class="cheat-item"><b>Plan owns its model call</b><span>The plan-generating inference span is a child of <code>plan</code>. It is the only nesting of its kind in the conventions.</span></div>
+      <div class="cheat-item"><b>The plan's tools are siblings</b><span>Tool and task spans from a plan sit under <code>invoke_agent</code>, next to the plan. Close the plan span before execution starts.</span></div>
+      <div class="cheat-item"><b>Workflow spans: the authorship test</b><span>SHOULD NOT for standalone agents or framework internals. SHOULD for workflows you designed, even nested.</span></div>
+      <div class="cheat-item"><b>Width, not depth</b><span>Each iteration adds siblings. A 40-child <code>invoke_agent</code> is a runaway loop, not a hard task.</span></div>
+      <div class="cheat-item"><b>Handoffs are siblings</b><span>Two <code>invoke_agent</code> spans side by side under the workflow. Nested agent spans mean an agent used as a tool - a different design.</span></div>
+      <div class="cheat-item"><b>Sum at one level only</b><span><code>invoke_agent</code> aggregates usage and children carry their own. Both correct. Summing across levels doubles the bill.</span></div>
+      <div class="cheat-item"><b>Count the structure</b><span><code>gen_ai.invoke_agent.inference_calls</code> and <code>.tool_calls</code>, buckets to 128. Bounded labels only. A runaway becomes a number.</span></div>
+      <div class="cheat-item"><b>Source beats docs</b><span><code>LANGSMITH_TRACING_MODE</code> not <code>OTEL_ENABLED</code>; <code>registerTelemetry</code> not <code>experimental_telemetry</code>. Read the resolver, pin the instrumentation.</span></div>
+    </div>
+  </section>
+
+  <footer class="pagefoot">
+    <span>Builder session 3 of 10 · learn-ai-observability-with-phoebe · by Phoebe Fu &nbsp;·&nbsp; 📚 <a href="https://phoebefu6.github.io/learn-with-phoebe/">Learn with Phoebe ↗</a></span>
+    <span><a href="b2-otel-genai-conventions.html">← Previous: OTel GenAI conventions</a> &nbsp;·&nbsp; <a href="../index.html">Course home</a> &nbsp;·&nbsp; <a href="b4-cost-and-latency-per-span.html">Next: Cost and latency per span →</a></span>
+  </footer>
+
+</main>
+
+<script src="../assets/app.js?v=2"></script>
+</body>
+</html>

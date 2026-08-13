@@ -1,0 +1,548 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Leader session 3 · Dashboards that answer questions - learn ai observability with phoebe</title>
+<link rel="stylesheet" href="../assets/style.css?v=2">
+</head>
+<body>
+
+<div class="toolbar">
+  <div class="wrap">
+    <span class="crumb"><a href="../index.html">learn-ai-observability-with-phoebe</a> / Leader session 3 of 6</span>
+    <button class="btn" id="toggle-all" type="button">Expand all</button>
+    <button class="btn primary" id="zoom-toggle" type="button">Projector zoom: off</button>
+  </div>
+</div>
+
+<header class="masthead">
+  <div class="wrap">
+    <div class="eyebrow">Learn AI Observability with Phoebe · Leader track · Session 3 of 6</div>
+    <h1>Dashboards that answer questions: <span class="accent">and the ones that just glow</span></h1>
+    <p class="sub">Beacon's p95 latency dashboard was green for the whole hour that Insight Bot was sending executives nineteen-hour-old revenue numbers. Nobody had built it wrong. It was answering the question it was designed to answer, which was not the question anyone in the room was asking. This session gives you the three questions a trace has to answer, the honest division of labour between metrics, traces and logs, and the one piece of arithmetic - cardinality - that decides which of your questions can be a dashboard at all.</p>
+    <div class="chip-row">
+      <span class="chip level">🟡 Leader track</span>
+      <span class="chip audience">Heads of engineering · platform leads · SRE managers</span>
+      <span class="chip time">45 min</span>
+    </div>
+    <div class="agenda">
+      <span class="a1" style="flex:1">0-3 · Welcome</span>
+      <span class="a2" style="flex:4">3-17 · The three questions, and the green hour</span>
+      <span class="a3" style="flex:5">17-40 · Three signals, cardinality, threading</span>
+      <span class="a4" style="flex:1">40-45 · Q&amp;A</span>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <!-- ============ INTRO ============ -->
+  <section class="section" id="intro">
+    <div class="section-kicker">
+      <span class="klabel">Part 0</span>
+      <h2>A dashboard is a question you froze</h2>
+    </div>
+    <p class="lede">Every panel on a wall is a question somebody asked once and then stopped asking. That is the whole value of a dashboard and it is also the whole risk: the question ages, the system changes shape underneath it, and the panel keeps returning a confident answer to a question nobody needs any more. Sessions a1 and a2 established that coverage is a decision. This session is about the second decision - which of the things you cover become an aggregate you watch, and which stay a receipt you go and read.</p>
+    <div class="legend">
+      <span class="pill solid">Live - presented in session</span>
+      <span class="pill light">Self-study - read after class</span>
+      <span class="pill inkpill">Official sources covered</span>
+    </div>
+    <div class="callout win">
+      <strong>★ What you walk out with today</strong>
+      The three questions a trace must answer before it is worth storing, a precise account of why an aggregate p95 dashboard held green through the Beacon incident, the honest division of labour between metrics, traces and logs, the cardinality arithmetic that decides what can be a metric label, and the difference between a trace id and a conversation id - which is the difference between knowing about one bad answer and knowing the bug is intermittent.
+    </div>
+    <div class="callout tip">
+      <strong>One sentence for the whole course</strong>
+      Evals tell you whether it works. Observability tells you what actually happened. A dashboard sits in a third place again: it tells you whether the population is healthy, which is a genuinely useful thing to know and is never the same as knowing whether the answer one executive read at 09:14 was true.
+    </div>
+    <div class="callout example">
+      <span class="ex-pill">Honesty note</span>
+      <p>The Beacon incident is a <strong>constructed case</strong> built for this course. The attribute names, span names and spec rules quoted on this page are the real ones; the trace itself was not captured from a live system, and the timings, percentages and volumes are computed from that constructed case. Everything in the OpenTelemetry GenAI semantic conventions is still <code>Development</code> status with <strong>no tagged release</strong>, so treat every attribute name here as a moving target and check the repository before you standardise on it.</p>
+    </div>
+  </section>
+
+  <!-- ============ PART 1 ============ -->
+  <section class="section" id="questions">
+    <div class="section-kicker">
+      <span class="klabel">Part 1 · the three questions</span>
+      <h2>What a green hour actually meant <span class="tag concept">14 min live</span></h2>
+    </div>
+    <p class="lede">Start from the test, not from the tooling. A trace is worth the storage it costs when it can answer three questions about one single request. Those three questions are also the exact list of things the Beacon dashboard could not answer, and the reason it could not answer them was not a bug in the dashboard.</p>
+
+    <table class="clean">
+      <tr><th>The question</th><th>What answers it</th><th>What Beacon's telemetry said</th></tr>
+      <tr><td><strong>Where did the time go?</strong></td><td>Parent span duration minus the sum of the children. Every second of wall clock should sit inside some span</td><td>Only <strong>32.4%</strong> of the run was inside any span. 4.60s of 6.80s was unaccounted, and unaccounted time is invisible by construction</td></tr>
+      <tr><td><strong>What did each step get and return?</strong></td><td>Attributes, not text: row counts, document counts, ids, scores, cache age</td><td>Nothing. The warehouse query returned <strong>0 rows</strong> and the cache entry was <strong>19.4 hours old</strong>, and neither number existed anywhere</td></tr>
+      <tr><td><strong>Did anything fail, including quietly?</strong></td><td>Span status set deliberately on the handled path, not only on the crash path</td><td>Status <strong>OK</strong> throughout. A <code>try / except</code> caught the 4.1s timeout, served the stale cache, and returned a confident answer</td></tr>
+    </table>
+
+    <p>Read the third row twice. The system did not lie to the dashboard. The dashboard asked "what proportion of requests errored" and the honest answer was zero, because nothing errored. The failure had been converted into a success by a well-intentioned piece of error handling, and no aggregate over any number of requests can recover information that was destroyed at the moment it was produced.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 410" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Left: the aggregate p95 dashboard, flat at 1.2 seconds all hour, well under the alert threshold. Right: individual requests in the same hour, four of twenty-four served a stale cache at normal latency. Below: the three reasons the incident could not appear - it was intermittent, the failing step was un-instrumented, and span status stayed OK.">
+        <style>
+          .g3H { font: 700 12.5px Inter, sans-serif; fill: #1B2230; }
+          .g3X { font: 400 11px Inter, sans-serif; fill: #66707E; }
+          .g3S { font: 400 10.5px Inter, sans-serif; fill: #16305C; }
+          .g3R { font: 400 10.5px Inter, sans-serif; fill: #991B1B; }
+          .g3B { font: 700 12.5px Inter, sans-serif; fill: #16305C; }
+          .g3D { font: 700 12.5px Inter, sans-serif; fill: #991B1B; }
+          .g3K { font: 600 12.5px Inter, sans-serif; fill: #08323A; }
+        </style>
+
+        <text class="g3H" x="24" y="36">What the dashboard aggregated</text>
+        <rect x="24" y="44" width="400" height="132" rx="10" fill="#EDF2FB" stroke="#AFC0E4" stroke-width="1.5"/>
+        <line x1="44" y1="70" x2="404" y2="70" stroke="#FCA5A5" stroke-width="1.5" stroke-dasharray="4 3"/>
+        <text class="g3R" x="250" y="64">alert threshold</text>
+        <line x1="44" y1="132" x2="404" y2="132" stroke="#C7CFDA" stroke-width="1"/>
+        <polyline points="44,114 84,110 124,116 164,112 204,109 244,115 284,111 324,113 364,110 404,112" fill="none" stroke="#16305C" stroke-width="2"/>
+        <text class="g3S" x="48" y="98">p95 latency</text>
+        <text class="g3X" x="48" y="152">p95 = 1.2s for the whole hour.</text>
+        <text class="g3X" x="48" y="168">It never moved, because it could not.</text>
+
+        <text class="g3H" x="456" y="36">What individual requests did</text>
+        <rect x="456" y="44" width="400" height="132" rx="10" fill="#FFFFFF" stroke="#C7CFDA" stroke-width="1.5"/>
+        <line x1="476" y1="132" x2="836" y2="132" stroke="#C7CFDA" stroke-width="1"/>
+        <rect x="476" y="110" width="6" height="22" fill="#AFC0E4"/>
+        <rect x="491" y="114" width="6" height="18" fill="#AFC0E4"/>
+        <rect x="506" y="108" width="6" height="24" fill="#AFC0E4"/>
+        <rect x="521" y="112" width="6" height="20" fill="#FCA5A5"/>
+        <rect x="536" y="106" width="6" height="26" fill="#AFC0E4"/>
+        <rect x="551" y="115" width="6" height="17" fill="#AFC0E4"/>
+        <rect x="566" y="110" width="6" height="22" fill="#AFC0E4"/>
+        <rect x="581" y="107" width="6" height="25" fill="#AFC0E4"/>
+        <rect x="596" y="113" width="6" height="19" fill="#AFC0E4"/>
+        <rect x="611" y="109" width="6" height="23" fill="#FCA5A5"/>
+        <rect x="626" y="112" width="6" height="20" fill="#AFC0E4"/>
+        <rect x="641" y="106" width="6" height="26" fill="#AFC0E4"/>
+        <rect x="656" y="114" width="6" height="18" fill="#AFC0E4"/>
+        <rect x="671" y="110" width="6" height="22" fill="#AFC0E4"/>
+        <rect x="686" y="108" width="6" height="24" fill="#AFC0E4"/>
+        <rect x="701" y="113" width="6" height="19" fill="#AFC0E4"/>
+        <rect x="716" y="111" width="6" height="21" fill="#FCA5A5"/>
+        <rect x="731" y="107" width="6" height="25" fill="#AFC0E4"/>
+        <rect x="746" y="115" width="6" height="17" fill="#AFC0E4"/>
+        <rect x="761" y="109" width="6" height="23" fill="#AFC0E4"/>
+        <rect x="776" y="112" width="6" height="20" fill="#AFC0E4"/>
+        <rect x="791" y="110" width="6" height="22" fill="#FCA5A5"/>
+        <rect x="806" y="106" width="6" height="26" fill="#AFC0E4"/>
+        <rect x="821" y="113" width="6" height="19" fill="#AFC0E4"/>
+        <text class="g3X" x="476" y="152">4 of 24 answers came from a</text>
+        <text class="g3X" x="476" y="168">19.4-hour-old cache. Same latency.</text>
+
+        <rect x="24" y="210" width="272" height="120" rx="10" fill="#EDF2FB" stroke="#AFC0E4" stroke-width="1.5"/>
+        <text class="g3B" x="40" y="234">1 · It was intermittent</text>
+        <text class="g3X" x="40" y="254">An aggregate over an hour is a</text>
+        <text class="g3X" x="40" y="270">vote. Four stale answers in</text>
+        <text class="g3X" x="40" y="286">twenty-four cannot outvote the</text>
+        <text class="g3X" x="40" y="302">good ones, and p95 exists</text>
+        <text class="g3X" x="40" y="318">precisely to ignore them.</text>
+
+        <rect x="304" y="210" width="272" height="120" rx="10" fill="#EDF2FB" stroke="#AFC0E4" stroke-width="1.5"/>
+        <text class="g3B" x="320" y="234">2 · The step was not there</text>
+        <text class="g3X" x="320" y="254">The 4.1s warehouse query sat</text>
+        <text class="g3X" x="320" y="270">inside no span at all. A step</text>
+        <text class="g3X" x="320" y="286">you do not instrument cannot</text>
+        <text class="g3X" x="320" y="302">appear slow, cannot appear</text>
+        <text class="g3X" x="320" y="318">empty, cannot appear failed.</text>
+
+        <rect x="584" y="210" width="272" height="120" rx="10" fill="#FEF2F2" stroke="#FCA5A5" stroke-width="1.5"/>
+        <text class="g3D" x="600" y="234">3 · Status stayed OK</text>
+        <text class="g3X" x="600" y="254">A try/except caught the</text>
+        <text class="g3X" x="600" y="270">timeout and served cached</text>
+        <text class="g3X" x="600" y="286">rows, so every span was green</text>
+        <text class="g3X" x="600" y="302">and the error rate was flat at</text>
+        <text class="g3X" x="600" y="318">zero. Nothing to alert on.</text>
+
+        <rect x="24" y="348" width="832" height="44" rx="10" fill="#FFFFFF" stroke="#C7CFDA" stroke-width="1.5"/>
+        <rect x="42" y="362" width="14" height="14" rx="3" fill="#0891A6"/>
+        <text class="g3K" x="66" y="374">An aggregate says whether the population is healthy. It cannot say whether one answer was right.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - three independent reasons the incident was invisible, any one of which is enough</figcaption>
+    </figure>
+
+    <div class="callout warn">
+      <strong>The compounding, stated plainly</strong>
+      Each of the three reasons is sufficient on its own. Fix the instrumentation gap and an intermittent bug still hides in the aggregate. Fix the status handling and an un-instrumented step still has no row to turn red. Make the bug constant instead of intermittent and it would have been found on day one by a human, not by your monitoring. That is the uncomfortable finding: Beacon was not caught by monitoring because it was intermittent, and intermittent is the normal condition of an AI system.
+    </div>
+
+    <details class="card" open>
+      <summary><span class="mode live">Live</span>Why p95 is the wrong instrument for this class of failure<span class="mini">4 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>A percentile is a statement about a population, and it is a deliberately robust one. p95 is built to be insensitive to a handful of odd requests, which is exactly what you want when you are protecting an SLO and exactly what you do not want when four answers in twenty-four are quietly wrong.</p>
+        <p>There is a second, subtler problem specific to AI systems: <strong>latency and cost are legitimately multi-modal</strong>. A cache hit and a cache miss are different populations. A one-step answer and a twelve-step agent run are different populations. One p95 line drawn across both either fires constantly or hides an entire mode inside the healthy one. Before you threshold anything, segment it - and the attributes you segment on have to be low-cardinality, which is Part 3.</p>
+        <p>And the failure Beacon actually had was not a latency failure at all. The stale answer arrived at completely normal speed. There is no percentile of any duration metric that could have caught it, because duration was never the symptom.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode self">Self-study</span>The 62% you were not shown<span class="mini">3 min read</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>In the constructed Beacon trace the retrieval step takes 4.2s of a 6.8s run - <strong>62% of the wall clock</strong> - and in the version that shipped, it had no span. The consequence is worth spelling out for a leadership audience because it is a budgeting argument, not a technical one.</p>
+        <ul>
+          <li>Your engineers were reasoning about the 38% of the request they could see, and reasoning well. The three days they spent on the model call were not incompetence; they were the rational response to the only evidence available.</li>
+          <li>The fix was not a code change, it was a <strong>visibility</strong> change. Once the retrieval span existed, the diagnosis took minutes. Nothing about the system's behaviour changed at the moment the bug became findable.</li>
+          <li>That is the shape of the return on instrumentation spend, and it is why the number to ask your team for is not "how many dashboards do we have" but "what percentage of an AI request's wall clock sits inside a span we emit". For most teams the honest answer is under half.</li>
+        </ul>
+      </div>
+    </details>
+  </section>
+
+  <!-- ============ PART 2 ============ -->
+  <section class="section" id="signals">
+    <div class="section-kicker">
+      <span class="klabel">Part 2 · three signals</span>
+      <h2>Metrics, traces and logs do different jobs <span class="tag concept">9 min live</span></h2>
+    </div>
+    <p class="lede">Vendors sell these three as a bundle and then teams treat them as interchangeable, which is how you end up with a metric that cannot answer a question and a trace store you cannot afford. They are not tiers of the same thing. They answer different questions, they fail in different ways, and their costs scale on different axes.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 350" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Three signals compared: metrics give the shape of the population and are cheap to keep, traces give one real request end to end and are expensive so you sample, logs give what the code said and are blind to anything nobody printed.">
+        <style>
+          .s3T { font: 700 12.5px Inter, sans-serif; fill: #FFFFFF; }
+          .s3S { font: 400 11px Inter, sans-serif; fill: #AFC0E4; }
+          .s3C { font: 400 11px Inter, sans-serif; fill: #E4F6F9; }
+          .s3X { font: 400 11px Inter, sans-serif; fill: #66707E; }
+          .s3K { font: 600 12.5px Inter, sans-serif; fill: #08323A; }
+        </style>
+
+        <rect x="24" y="24" width="192" height="76" rx="10" fill="#16305C"/>
+        <text class="s3T" x="42" y="50">Metrics</text>
+        <text class="s3S" x="42" y="68">shape of the population</text>
+        <rect x="230" y="24" width="626" height="76" rx="10" fill="#EDF2FB" stroke="#AFC0E4" stroke-width="1.5"/>
+        <text class="s3X" x="250" y="46">Pre-aggregated counters and histograms. Cheap to keep for a year, and the only</text>
+        <text class="s3X" x="250" y="64">signal you can afford to compute over every request. Answers: is the population</text>
+        <text class="s3X" x="250" y="82">healthy, is it trending, has the shape of latency or cost moved since last week.</text>
+
+        <rect x="24" y="112" width="192" height="76" rx="10" fill="#0C1F3F"/>
+        <text class="s3T" x="42" y="138">Traces</text>
+        <text class="s3S" x="42" y="156">one real request</text>
+        <rect x="230" y="112" width="626" height="76" rx="10" fill="#EDF2FB" stroke="#AFC0E4" stroke-width="1.5"/>
+        <text class="s3X" x="250" y="134">One request end to end, with every step, duration, attribute and status in the</text>
+        <text class="s3X" x="250" y="152">order they happened. Answers: where did the time go on THIS request, what did</text>
+        <text class="s3X" x="250" y="170">each step get and return, did anything fail. Expensive, so you sample it.</text>
+
+        <rect x="24" y="200" width="192" height="76" rx="10" fill="#0891A6"/>
+        <text class="s3T" x="42" y="226">Logs</text>
+        <text class="s3C" x="42" y="244">what the code said</text>
+        <rect x="230" y="200" width="626" height="76" rx="10" fill="#E4F6F9" stroke="#0891A6" stroke-width="1.5"/>
+        <text class="s3X" x="250" y="222">Lines your code chose to write, at the moment it wrote them. Answers: what did</text>
+        <text class="s3X" x="250" y="240">this process think it was doing. Unbeatable for the stack trace and the config</text>
+        <text class="s3X" x="250" y="258">value, useless for shape, blind to anything nobody thought to print.</text>
+
+        <rect x="24" y="292" width="832" height="44" rx="10" fill="#FFFFFF" stroke="#C7CFDA" stroke-width="1.5"/>
+        <rect x="42" y="306" width="14" height="14" rx="3" fill="#0891A6"/>
+        <text class="s3K" x="66" y="318">Metrics find the hour. Traces find the request. Logs find the line.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - three signals, three questions, three cost curves</figcaption>
+    </figure>
+
+    <table class="clean">
+      <tr><th></th><th>Metrics</th><th>Traces</th><th>Logs</th></tr>
+      <tr><td><strong>Unit</strong></td><td>The population, over a window</td><td>One request, as a tree</td><td>One moment, as a line</td></tr>
+      <tr><td><strong>Cost scales with</strong></td><td>Distinct time series - the number of label combinations, not the request count</td><td>Request count and span count, so retention is the lever and sampling is the tool</td><td>Volume of text, which is the least predictable of the three</td></tr>
+      <tr><td><strong>Kept for</strong></td><td>A year without argument</td><td>Days to weeks, sampled</td><td>Whatever your bill tolerates</td></tr>
+      <tr><td><strong>Alertable</strong></td><td>Yes - this is what alerts are made of</td><td>Rarely directly; you alert on a metric derived from traces</td><td>Only via a fragile pattern match on text somebody may rename</td></tr>
+      <tr><td><strong>Fails you when</strong></td><td>The question needs an id, or the population hides a mode</td><td>The trace you need was the one you sampled away</td><td>The interesting thing was never printed, and the loop makes iteration 3 look like iteration 1</td></tr>
+      <tr><td><strong>Beacon reading</strong></td><td>Green. Correctly, honestly green</td><td>Would have shown it, if the retrieval span had existed</td><td>Showed a caught timeout at INFO, in a stream nobody reads</td></tr>
+    </table>
+
+    <p>Notice what the last row says about the log line. The information was <em>technically present</em>. A timeout was written to a log stream at INFO level, inside an hour that contained several million other lines, with nothing tying it to the specific answer an executive was reading. Data you cannot find is indistinguishable from data you do not have, and this is the honest sense in which the team "had the evidence" and still spent three days.</p>
+
+    <div class="callout tip">
+      <strong>The leader-track version of this</strong>
+      When somebody asks you to fund observability, they usually mean one of the three. Ask which question they are trying to answer. "Is the fleet healthy" is a metrics budget, and it is small. "Why was this answer wrong" is a trace budget, and it is the one that gets cut first because its value only shows up during an incident. "What did the code do" is a log budget, and it is usually the one already overspent.
+    </div>
+  </section>
+
+  <!-- ============ PART 3 ============ -->
+  <section class="section" id="ids">
+    <div class="section-kicker">
+      <span class="klabel">Part 3 · ids</span>
+      <h2>Cardinality forces the split, and threading undoes it <span class="tag concept">10 min live</span></h2>
+    </div>
+    <p class="lede">There is one piece of arithmetic behind almost every argument you will have about observability cost, and it is not about how many requests you get. Metrics cost scales with the number of <strong>distinct time series</strong>, which is the Cartesian product of the label values you attach. Add one unbounded label and you have not made the bill bigger; you have removed its ceiling.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 390" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Bounded metric labels multiply to a few thousand series and are affordable. Adding one unbounded id such as the conversation id multiplies by every conversation ever, removing the ceiling. The GenAI conventions exclude unbounded ids from every metric attribute set, which is the guardrail.">
+        <style>
+          .c3T { font: 700 13px Inter, sans-serif; fill: #1B2230; }
+          .c3H { font: 700 12.5px Inter, sans-serif; fill: #16305C; }
+          .c3D { font: 700 12.5px Inter, sans-serif; fill: #991B1B; }
+          .c3X { font: 400 11px Inter, sans-serif; fill: #66707E; }
+          .c3M { font: 400 11px ui-monospace, Menlo, monospace; fill: #16305C; }
+          .c3N { font: 400 11px ui-monospace, Menlo, monospace; fill: #991B1B; }
+          .c3F { font: 400 11px Inter, sans-serif; fill: #C7CFDA; }
+          .c3K { font: 600 12.5px Inter, sans-serif; fill: #08323A; }
+        </style>
+
+        <text class="c3T" x="24" y="28">Metrics cost scales with distinct time series - the Cartesian product of label values</text>
+
+        <rect x="24" y="44" width="404" height="160" rx="10" fill="#EDF2FB" stroke="#AFC0E4" stroke-width="1.5"/>
+        <text class="c3H" x="44" y="68">What the spec puts on a metric</text>
+        <text class="c3M" x="44" y="92">gen_ai.provider.name</text>
+        <text class="c3X" x="216" y="92">16 well-known values</text>
+        <text class="c3M" x="44" y="112">gen_ai.request.model</text>
+        <text class="c3X" x="216" y="112">bounded, tens</text>
+        <text class="c3M" x="44" y="132">gen_ai.token.type</text>
+        <text class="c3X" x="216" y="132">2: input, output</text>
+        <line x1="44" y1="146" x2="408" y2="146" stroke="#AFC0E4" stroke-width="1"/>
+        <text class="c3X" x="44" y="168">Product: 16 x tens x 2 = a few thousand series.</text>
+        <text class="c3X" x="44" y="186">Bounded, predictable, cheap to keep for a year.</text>
+
+        <rect x="452" y="44" width="404" height="160" rx="10" fill="#FEF2F2" stroke="#FCA5A5" stroke-width="1.5"/>
+        <text class="c3D" x="472" y="68">Add one unbounded id</text>
+        <text class="c3N" x="472" y="92">gen_ai.conversation.id</text>
+        <text class="c3X" x="472" y="112">One new value per conversation. Nothing bounds it.</text>
+        <text class="c3X" x="472" y="132">Same for response id, tool call id, agent id.</text>
+        <line x1="472" y1="146" x2="836" y2="146" stroke="#FCA5A5" stroke-width="1"/>
+        <text class="c3X" x="472" y="168">Product: a few thousand x every conversation you</text>
+        <text class="c3X" x="472" y="186">have ever had. Unbounded. The bill has no ceiling.</text>
+
+        <rect x="24" y="220" width="832" height="96" rx="10" fill="#FFFFFF" stroke="#C7CFDA" stroke-width="1.5"/>
+        <text class="c3T" x="44" y="244">The guardrail is already written into the spec</text>
+        <text class="c3X" x="44" y="266">Every metric attribute set in the GenAI conventions deliberately excludes unbounded ids: no conversation id,</text>
+        <text class="c3X" x="44" y="284">no response id, no user id, no tool call id. That exclusion IS the cardinality guardrail, not an oversight.</text>
+        <text class="c3F" x="44" y="304">Safe on spans, never as a metric dimension: conversation id, response id, tool call id, agent id.</text>
+
+        <rect x="24" y="332" width="832" height="44" rx="10" fill="#FFFFFF" stroke="#C7CFDA" stroke-width="1.5"/>
+        <rect x="42" y="346" width="14" height="14" rx="3" fill="#0891A6"/>
+        <text class="c3K" x="66" y="358">Unbounded ids are safe on a span and ruinous on a metric. That asymmetry is what forces the split.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - the multiplication that decides which questions can be a dashboard</figcaption>
+    </figure>
+
+    <p>This is the most useful thing on the page for a budget conversation, because it converts a vague "observability is expensive" into a specific rule. You can afford an aggregate over anything <strong>bounded</strong> - provider, model, operation, tenant if you have tens of tenants, feature if you have tens of features. You cannot afford an aggregate keyed on anything that grows with usage, and the spec authors already made that call for you: not one of the GenAI metrics carries an id in its attribute set.</p>
+
+    <div class="callout warn">
+      <strong>The request you will receive, and the answer</strong>
+      Someone will ask for a dashboard of cost per conversation, with the conversation id as a label. It is a completely reasonable business question and it must not be a metric. The answer is a split: emit <em>cost per conversation as a distribution</em> on the metrics side, where the labels are bounded, and keep the conversation id on the spans, where an unbounded value is free. Then the dashboard shows you that some conversations cost thirty times the median, and the trace store tells you which ones and why. Neither signal can do both halves.
+    </div>
+
+    <p class="lede">Which brings us to the second half of Part 3, and to the thing that separates a team who has telemetry from a team who can diagnose with it. A conversation is not a trace.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 400" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="One conversation of four user turns produces four separate traces. Two of the four served a nineteen-hour-old cache. Joined on the conversation id the pattern reads as intermittent rather than as four unrelated one-offs.">
+        <style>
+          .t3T { font: 700 13px Inter, sans-serif; fill: #1B2230; }
+          .t3M { font: 400 11px ui-monospace, Menlo, monospace; fill: #FFFFFF; }
+          .t3N { font: 400 10.5px ui-monospace, Menlo, monospace; fill: #1B2230; }
+          .t3R { font: 600 10.5px Inter, sans-serif; fill: #991B1B; }
+          .t3G { font: 600 10.5px Inter, sans-serif; fill: #08323A; }
+          .t3X { font: 400 11px Inter, sans-serif; fill: #66707E; }
+          .t3K { font: 600 12.5px Inter, sans-serif; fill: #08323A; }
+        </style>
+
+        <text class="t3T" x="24" y="28">One conversation, four user turns, four separate traces</text>
+
+        <rect x="24" y="44" width="832" height="32" rx="8" fill="#0C1F3F"/>
+        <text class="t3M" x="44" y="65">gen_ai.conversation.id = c_8f3a   ·   one thread, four traces, one join key</text>
+
+        <rect x="24" y="92" width="200" height="26" rx="7" fill="#16305C"/>
+        <text class="t3M" x="38" y="110">trace 1 · turn 1</text>
+        <rect x="24" y="124" width="200" height="22" rx="6" fill="#3F62A8"/>
+        <text class="t3M" x="38" y="139">retrieve   0.4s</text>
+        <rect x="24" y="150" width="200" height="22" rx="6" fill="#AFC0E4"/>
+        <text class="t3N" x="38" y="165">cache   age 0.2h</text>
+        <rect x="24" y="180" width="200" height="28" rx="7" fill="#E4F6F9" stroke="#0891A6" stroke-width="1.5"/>
+        <text class="t3G" x="38" y="198">answer fresh</text>
+
+        <rect x="232" y="92" width="200" height="26" rx="7" fill="#16305C"/>
+        <text class="t3M" x="246" y="110">trace 2 · turn 2</text>
+        <rect x="232" y="124" width="200" height="22" rx="6" fill="#3F62A8"/>
+        <text class="t3M" x="246" y="139">retrieve   4.2s</text>
+        <rect x="232" y="150" width="200" height="22" rx="6" fill="#FCA5A5"/>
+        <text class="t3N" x="246" y="165">cache   age 19.4h</text>
+        <rect x="232" y="180" width="200" height="28" rx="7" fill="#FEF2F2" stroke="#FCA5A5" stroke-width="1.5"/>
+        <text class="t3R" x="246" y="198">answer stale · status OK</text>
+
+        <rect x="440" y="92" width="200" height="26" rx="7" fill="#16305C"/>
+        <text class="t3M" x="454" y="110">trace 3 · turn 3</text>
+        <rect x="440" y="124" width="200" height="22" rx="6" fill="#3F62A8"/>
+        <text class="t3M" x="454" y="139">retrieve   0.5s</text>
+        <rect x="440" y="150" width="200" height="22" rx="6" fill="#AFC0E4"/>
+        <text class="t3N" x="454" y="165">cache   age 0.1h</text>
+        <rect x="440" y="180" width="200" height="28" rx="7" fill="#E4F6F9" stroke="#0891A6" stroke-width="1.5"/>
+        <text class="t3G" x="454" y="198">answer fresh</text>
+
+        <rect x="648" y="92" width="200" height="26" rx="7" fill="#16305C"/>
+        <text class="t3M" x="662" y="110">trace 4 · turn 4</text>
+        <rect x="648" y="124" width="200" height="22" rx="6" fill="#3F62A8"/>
+        <text class="t3M" x="662" y="139">retrieve   4.1s</text>
+        <rect x="648" y="150" width="200" height="22" rx="6" fill="#FCA5A5"/>
+        <text class="t3N" x="662" y="165">cache   age 19.4h</text>
+        <rect x="648" y="180" width="200" height="28" rx="7" fill="#FEF2F2" stroke="#FCA5A5" stroke-width="1.5"/>
+        <text class="t3R" x="662" y="198">answer stale · status OK</text>
+
+        <rect x="24" y="228" width="832" height="96" rx="10" fill="#EDF2FB" stroke="#AFC0E4" stroke-width="1.5"/>
+        <text class="t3T" x="44" y="252">What the thread tells you that any single trace cannot</text>
+        <text class="t3X" x="44" y="274">trace_id answers one turn. Two of these four turns served stale numbers, and each trace on its own</text>
+        <text class="t3X" x="44" y="292">looks like a one-off. Joined on gen_ai.conversation.id the pattern reads as intermittent, which is a</text>
+        <text class="t3X" x="44" y="310">different bug, with a different fix, from a system that is broken on every single request.</text>
+
+        <rect x="24" y="340" width="832" height="44" rx="10" fill="#FFFFFF" stroke="#C7CFDA" stroke-width="1.5"/>
+        <rect x="42" y="354" width="14" height="14" rx="3" fill="#0891A6"/>
+        <text class="t3K" x="66" y="366">A conversation spans many traces. The join key is what turns four incidents into one pattern.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - four traces, one thread, and the word "intermittent" arriving from the join</figcaption>
+    </figure>
+
+    <p>The mechanics matter here because they are frequently got wrong in a way that costs you the diagnosis. <code>trace_id</code> is scoped to <strong>one user turn</strong>. A ten-turn conversation is ten traces. If your incident review looks at traces one at a time you will keep concluding "unlucky request" and you will never produce the word that actually changes the fix: <em>intermittent</em>. The join key that reassembles the thread is <code>gen_ai.conversation.id</code>, which the conventions mark <strong>Conditionally Required</strong> on inference spans.</p>
+
+    <div class="callout example">
+      <span class="ex-pill">Two rules people break</span>
+      <p><strong>1. There is no <code>gen_ai.user.id</code>.</strong> User-level aggregation is simply not part of the GenAI conventions. The general OpenTelemetry namespace offers <code>session.id</code> and <code>session.previous_id</code>, both also <code>Development</code>, and the platforms fill the gap in their own dialects - OpenInference has <code>user.id</code>, Langfuse has <code>langfuse.user.id</code> and <code>langfuse.session.id</code>. So "cost per user" is a choice you are making, not a standard you are following, and it is one of the small lock-in decisions session a6 is about. The route the spec explicitly blesses is to set these ids in a <strong>custom span processor at your application boundary</strong>: on the spans, out of the metric labels.</p>
+        <p><strong>2. When you have no conversation id, you leave it unset.</strong> The spec is unusually direct about this, verbatim: "When no identifier for the conversation is available, instrumentations SHOULD NOT populate conversation id. For example, a new UUID, a trace identifier, or a hash of request content SHOULD NOT be used as a fallback value." Fabricating one feels harmless and is worse than empty, because a fabricated id makes every single-turn request look like its own conversation and quietly destroys exactly the intermittency signal you built the field for.</p>
+    </div>
+
+    <details class="card">
+      <summary><span class="mode self">Self-study</span>The compaction attribute, and the regression that correlates with nothing<span class="mini">2 min read</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>There is a related field worth knowing about because it explains a class of complaint that otherwise looks like superstition: <code>gen_ai.conversation.compacted</code>. It is a <strong>positive indicator only</strong> - set when a context was compacted, and never set to false.</p>
+        <p>The complaint it explains sounds like this: "it was good for the first twenty minutes and then it got worse, and we changed nothing." If the conversation's context was compacted partway through, quality can move for a reason that appears in no prompt, no deploy and no model version. Without that flag on the spans, the regression correlates with nothing you record, and the investigation ends in a shrug. With it, the correlation is one query.</p>
+      </div>
+    </details>
+  </section>
+
+  <!-- ============ EXERCISE 1 ============ -->
+  <section class="section" id="decision-1">
+    <div class="section-kicker">
+      <span class="klabel">Decision drill 1 of 2</span>
+      <h2>Green dashboard, three angry executives <span class="tag exercise">◐ 8 min · in pairs</span></h2>
+    </div>
+    <p class="lede">Read the situation, then commit to an answer before you discuss it. The point of the drill is the order of your asks, not the eventual fix.</p>
+
+    <div class="callout example">
+      <span class="ex-pill">The situation</span>
+      <p>It is 10:20. Three executives have independently said that this morning's revenue figures from Insight Bot were wrong. Your latency dashboard is green, your error rate is flat at zero, and your uptime is 100%. Your on-call engineer has spent an hour and found nothing. Your head of data says the warehouse is fine. Nobody can reproduce it.</p>
+    </div>
+
+    <div class="steps">
+      <div class="step"><p><strong>Decide first, alone.</strong> What is the very first thing you ask for? Write it down. Then write down what you would ask for if the answer to the first thing is "we do not have that".</p></div>
+      <div class="step"><p><strong>Rank these four asks</strong> in the order you would make them: (a) the traces for the three specific answers the executives read, (b) a new dashboard panel for cache age, (c) the percentage of an Insight Bot request's wall clock that sits inside a span you emit, (d) a rollback of last night's deploy.</p></div>
+      <div class="step"><p><strong>Now the hard part.</strong> Two of those four asks are answerable in ten minutes with telemetry most teams already have, one takes a week, and one is a guess dressed as an action. Which is which, and what does that tell you about what to fund before the next incident rather than during it?</p></div>
+      <div class="step"><p><strong>Discuss as a group.</strong> If the answer to (a) is "we do not keep traces that long" or "we sample at 1% so those three are gone", you have found a retention and sampling decision that somebody made without knowing they were making it. Who should own that decision, and what would you need to know to make it well?</p></div>
+    </div>
+
+    <div class="callout tip">
+      <strong>What the drill is teaching</strong>
+      The instinct to add a panel is the wrong instinct, and it is nearly universal. A new panel answers a question you have already asked, and this incident is being caused by a question you did not know to ask. The ask that generalises is (c) - the coverage number - because it is the only one whose answer improves your position for every future incident rather than this one.
+    </div>
+  </section>
+
+  <!-- ============ EXERCISE 2 ============ -->
+  <section class="section" id="decision-2">
+    <div class="section-kicker">
+      <span class="klabel">Decision drill 2 of 2</span>
+      <h2>The request that must be split <span class="tag exercise">◐ 7 min · in pairs</span></h2>
+    </div>
+    <p class="lede">This one arrives by email, from someone reasonable, asking for something impossible. Your job is to give them what they actually need without agreeing to what they asked for.</p>
+
+    <div class="callout example">
+      <span class="ex-pill">The email</span>
+      <p>"Can we get a dashboard showing cost and latency per conversation, broken down by user, so we can see which customers are expensive? Also please add the conversation id and the user email as filters so support can look up a specific complaint."</p>
+    </div>
+
+    <div class="steps">
+      <div class="step"><p><strong>Name the two questions hiding in one request.</strong> One of them is about a population and one is about a lookup. They need different signals and different storage, and answering them as one thing is what makes the request impossible.</p></div>
+      <div class="step"><p><strong>Do the cardinality arithmetic out loud</strong> for the version as asked: bounded labels multiply out to a few thousand series, then multiply that by every conversation and every user. Say the resulting number as "unbounded" rather than as a guess, because the point is that it has no ceiling rather than that it is large.</p></div>
+      <div class="step"><p><strong>Write the counter-proposal in three lines.</strong> A distribution on the metrics side with bounded labels only; conversation id and a pseudonymous user key on the spans; a support lookup path that goes to the trace store, not to the dashboard. Then say what each half cannot do, so nobody discovers the limit during an incident.</p></div>
+      <div class="step"><p><strong>Decide the uncomfortable one.</strong> The email asked for user <em>email</em> as a filter. That is a personal identifier in a telemetry store which usually sits in third-party SaaS with broad internal read access. What do you put there instead, who approves it, and what is your answer when someone says a pseudonymous key makes support slower? Session a6 owns the full version of this argument; today just write your first answer down.</p></div>
+    </div>
+  </section>
+
+  <!-- ============ HOMEWORK ============ -->
+  <section class="section" id="exercise">
+    <div class="section-kicker">
+      <span class="klabel">Homework</span>
+      <h2>Try it yourself - this week <span class="tag exercise">◐ 40-50 min total</span></h2>
+    </div>
+    <ul>
+      <li><strong>Audit one dashboard for the three questions.</strong> Take the panel your team looks at most and ask which of the three it can answer for a single request: where the time went, what each step got and returned, whether anything failed including quietly. Most fleet dashboards answer none of the three, which is fine as long as everyone knows it.</li>
+      <li><strong>Get the coverage number.</strong> Ask for one figure: the percentage of an AI request's wall clock that sits inside a span you emit. Not an estimate from the team who wrote the instrumentation - a measurement from a real trace. This is the single number this whole track is about, and for most teams it is under fifty.</li>
+      <li><strong>Count the labels on your most expensive metric.</strong> Multiply the distinct values of each label together. If any label is an id, a session key, a URL path with ids in it, or anything that grows with usage, you have found a bill with no ceiling and probably an unexplained line item you have been arguing about for months.</li>
+      <li><strong>Check whether you can thread.</strong> Pick a real multi-turn conversation and try to retrieve every trace belonging to it with one query. If you cannot, you currently cannot distinguish an intermittent bug from an unlucky request - and that distinction changes the fix, not just the story.</li>
+      <li><strong>Find your fabricated ids.</strong> Ask whether anything in your stack fills in a conversation or session id when one is missing. A UUID per request, a copy of the trace id, or a hash of the prompt all look tidy and all destroy the intermittency signal. The spec's position is to leave the field unset, and it is right.</li>
+    </ul>
+  </section>
+
+  <!-- ============ SOURCES ============ -->
+  <section class="section" id="official">
+    <div class="section-kicker">
+      <span class="klabel">Source material</span>
+      <h2>Official sources covered</h2>
+    </div>
+    <p class="lede">The conventions, requirement levels and verbatim spec language on this page trace to the OpenTelemetry GenAI semantic conventions, catalogued in this course's source map. The incident is constructed; the spec rules are not. This page covers:</p>
+    <div class="covered">
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">The three questions a trace must answer to be worth storing</span><span class="note">Part 1 · with the Beacon reading against each one</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Metrics, traces and logs as three signals with different units, cost curves and failure modes</span><span class="note">Part 2 · the division of labour, and what each cannot do</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Cardinality: metrics cost scales with distinct time series, the Cartesian product of label values</span><span class="note">Part 3 · bounded provider and model versus unbounded ids</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Every GenAI metric attribute set excludes unbounded ids - no conversation id, response id, user id or tool call id</span><span class="note">Part 3 · the spec's exclusion IS the guardrail</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name"><code>gen_ai.conversation.id</code> as Conditionally Required, and the verbatim prohibition on fabricating one</span><span class="note">Part 3 · no UUID, no trace id, no hash of request content as fallback</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">There is no <code>gen_ai.user.id</code>; <code>session.id</code> and <code>session.previous_id</code> live in the general namespace, and platforms fill the gap in their own dialects</span><span class="note">Part 3 · set ids in a span processor at the app boundary</span></div>
+      <div class="covered-row"><span class="status pill light">◐</span><span class="name"><code>gen_ai.conversation.compacted</code> as a positive-only indicator</span><span class="note">Self-study · the quality regression that correlates with nothing</span></div>
+      <div class="covered-row"><span class="status pill light">◐</span><span class="name">The exact metric names, units and histogram buckets</span><span class="note">Named loosely here · the full table with buckets is builder session b8</span></div>
+      <div class="covered-row"><span class="status pill light">◐</span><span class="name">Sampling as the mechanism that decides which traces still exist when you need them</span><span class="note">Raised in drill 1 · head versus tail sampling is builder session b7</span></div>
+      <div class="covered-row"><span class="status pill light">◐</span><span class="name">Burn-rate alerting and why static thresholds misfire on AI metrics</span><span class="note">Touched in Part 1 · the whole argument is leader session a5</span></div>
+      <div class="covered-row"><span class="status pill bare">○</span><span class="name">Eval metrics, judge calibration and golden sets</span><span class="note">Not covered by design · <a href="https://phoebefu6.github.io/learn-ai-evals-with-phoebe/">Learn Evals</a> owns them, and this course assumes them</span></div>
+    </div>
+    <p>Two honesty flags to carry out of the room. The GenAI conventions now live in a dedicated repository and every span, metric, event and attribute in them is <code>Development</code> with <strong>no git tags and no releases</strong>, so there is no version to pin and no name to treat as permanent. And the Beacon numbers - 32.4% coverage, 4.60s unaccounted, 19.4-hour cache, 62% of wall clock in retrieval - are computed from a constructed case built to teach the mechanism, not measured from a production system.</p>
+  </section>
+
+  <!-- ============ QUIZ ============ -->
+  <section class="section" id="quiz">
+    <div class="section-kicker">
+      <span class="klabel">Check yourself</span>
+      <h2>Three questions before you go 🎯 <span class="tag exercise">◐ 90 seconds</span></h2>
+    </div>
+    <div class="quiz-q" data-answer="1">
+      <p class="qtext">1 · Your aggregate p95 dashboard stayed green through an hour in which four answers in twenty-four were built on a nineteen-hour-old cache. What is the most complete explanation?</p>
+      <button class="qopt" type="button">A · The dashboard was misconfigured and the p95 window was too long</button>
+      <button class="qopt" type="button">B · Three independent things, each sufficient on its own: the bug was intermittent so a few bad answers cannot move an hourly aggregate, the failing step was un-instrumented so it could not appear slow, empty or failed, and a caught exception left span status OK so error rate was honestly zero</button>
+      <button class="qopt" type="button">C · The model was hallucinating, which no dashboard can detect</button>
+      <p class="qwhy">All three matter, and the compounding is the lesson. Fix the coverage gap and an intermittent bug still hides inside the aggregate. Fix the status handling and a step with no span still has no row to turn red. And note that latency was never the symptom - the stale answer arrived at completely normal speed, so no percentile of any duration metric could have caught it. The dashboard was not broken. It was answering a question about the population while everyone in the room had a question about one answer.</p>
+    </div>
+    <div class="quiz-q" data-answer="2">
+      <p class="qtext">2 · Someone asks for a metric of cost per conversation with <code>gen_ai.conversation.id</code> as a label. What do you tell them?</p>
+      <button class="qopt" type="button">A · Yes, but sample it at 1% to keep the cost down</button>
+      <button class="qopt" type="button">B · Yes - conversation id is on the spans already, so it is free to add to a metric</button>
+      <button class="qopt" type="button">C · No, and split the request: metrics cost scales with distinct time series, which is the Cartesian product of label values, so an unbounded id removes the bill's ceiling. Emit the distribution with bounded labels, keep the conversation id on the spans, and do the lookup in the trace store</button>
+      <p class="qwhy">Bounded labels multiply out to something you can budget for - a provider with sixteen well-known values, a model count in the tens, a token type with two. Multiply that by every conversation you will ever have and there is no ceiling at all. This is why the conventions exclude ids from every single metric attribute set: it is not an oversight, it is the guardrail. The business question is real and the answer is a split, because an unbounded attribute is free on a span and ruinous on a metric.</p>
+    </div>
+    <div class="quiz-q" data-answer="0">
+      <p class="qtext">3 · A request arrives with no conversation identifier available. What should the instrumentation put in <code>gen_ai.conversation.id</code>?</p>
+      <button class="qopt" type="button">A · Nothing - leave it unset. The spec says a new UUID, a trace identifier or a hash of request content should not be used as a fallback</button>
+      <button class="qopt" type="button">B · A fresh UUID, so every span has the field populated and queries never hit nulls</button>
+      <button class="qopt" type="button">C · The trace id, since one turn is one trace anyway</button>
+      <p class="qwhy">Fabrication is worse than absence here, and the reason is diagnostic rather than aesthetic. A conversation spans many traces - one per user turn - and the whole value of the field is that it reassembles the thread so you can see that two turns in four went wrong. Fill it with a per-request UUID or a copy of the trace id and every request becomes its own conversation, the join returns nothing, and you permanently lose the ability to tell an intermittent bug from an unlucky request. The spec's language is explicit, and there is also no <code>gen_ai.user.id</code> to fall back on.</p>
+    </div>
+    <p class="quiz-score"></p>
+  </section>
+
+  <!-- ============ CHEAT SHEET ============ -->
+  <section class="cheat" id="cheatsheet">
+    <h3>Leader session 3 cheat sheet <span>· pin this</span></h3>
+    <div class="grid-2">
+      <div class="cheat-item"><b>Three questions</b><span>Where did the time go? What did each step get and return? Did anything fail, including quietly? A trace that answers none of them is storage you are paying for.</span></div>
+      <div class="cheat-item"><b>Why green held</b><span>Intermittent, so the aggregate outvoted it. Un-instrumented, so it could not appear slow, empty or failed. Status OK, so error rate was honestly zero. Any one is enough.</span></div>
+      <div class="cheat-item"><b>Aggregate vs receipt</b><span>An aggregate says whether the population is healthy. It cannot say whether one answer was right. Both questions are legitimate and they need different signals.</span></div>
+      <div class="cheat-item"><b>Metrics</b><span>The shape of the population. Cheap enough to keep for a year and to compute on every request. Blind to anything that needs an id.</span></div>
+      <div class="cheat-item"><b>Traces</b><span>One real request end to end. The only signal that answers "why was this answer wrong". Expensive, so you sample - and the sample decides what still exists later.</span></div>
+      <div class="cheat-item"><b>Logs</b><span>What the code said, at the moment it said it. Unbeatable for a stack trace, blind to shape, and useless once a loop makes iteration 3 look like iteration 1.</span></div>
+      <div class="cheat-item"><b>Cardinality</b><span>Metrics cost scales with distinct time series - the Cartesian product of label values. Bounded labels are affordable, one unbounded id removes the ceiling. The spec excludes ids from every metric attribute set, and that exclusion is the guardrail.</span></div>
+      <div class="cheat-item"><b>Threading</b><span><code>trace_id</code> is one turn; <code>gen_ai.conversation.id</code> is the join key that reassembles the thread, and it is how you learn a bug is intermittent. There is no <code>gen_ai.user.id</code>, and fabricating a conversation id from a UUID, a trace id or a content hash is forbidden by the spec.</span></div>
+    </div>
+  </section>
+
+  <footer class="pagefoot">
+    <span>Leader session 3 of 6 · learn-ai-observability-with-phoebe · by Phoebe Fu &nbsp;·&nbsp; 📚 <a href="https://phoebefu6.github.io/learn-with-phoebe/">Learn with Phoebe ↗</a></span>
+    <span><a href="../index.html">← Course home</a> &nbsp;·&nbsp; <a href="a4-what-ai-costs-you.html">Next: What AI actually costs you →</a></span>
+  </footer>
+
+</main>
+
+<script src="../assets/app.js?v=2"></script>
+</body>
+</html>

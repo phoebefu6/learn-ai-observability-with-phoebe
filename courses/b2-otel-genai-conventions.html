@@ -1,0 +1,594 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Builder session 2 · OTel GenAI conventions - learn ai observability with phoebe</title>
+<link rel="stylesheet" href="../assets/style.css?v=2">
+</head>
+<body>
+
+<div class="toolbar">
+  <div class="wrap">
+    <span class="crumb"><a href="../index.html">learn-ai-observability-with-phoebe</a> / Builder session 2 of 10</span>
+    <button class="btn" id="toggle-all" type="button">Expand all</button>
+    <button class="btn primary" id="zoom-toggle" type="button">Projector zoom: off</button>
+  </div>
+</div>
+
+<header class="masthead">
+  <div class="wrap">
+    <div class="eyebrow">Learn AI Observability with Phoebe · Builder track · Session 2 of 10</div>
+    <h1>OTel GenAI conventions: <span class="accent">the names, and the ones that changed under you</span></h1>
+    <p class="sub">This is the reference session, the one you come back to. It is also the session most likely to contradict something you read online, because three things about the GenAI semantic conventions have moved recently enough that most blog posts, most Stack Overflow answers and a fair number of shipping instrumentations are describing a spec that no longer exists. We start with those three, then go through the exact span names, the exact attribute names with their requirement levels, and the second dialect you will meet in the wild.</p>
+    <div class="chip-row">
+      <span class="chip level">🟢 Builder track</span>
+      <span class="chip audience">AI engineers · platform engineers · technical PMs</span>
+      <span class="chip time">45 min</span>
+    </div>
+    <div class="agenda">
+      <span class="a1" style="flex:1">0-3 · Welcome</span>
+      <span class="a2" style="flex:4">3-16 · What moved, and the trap table</span>
+      <span class="a3" style="flex:5">16-40 · Build-along: audit, then re-emit</span>
+      <span class="a4" style="flex:1">40-45 · Q&amp;A</span>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <!-- ============ INTRO ============ -->
+  <section class="section" id="intro">
+    <div class="section-kicker">
+      <span class="klabel">Part 0</span>
+      <h2>Why a naming session earns 45 minutes</h2>
+    </div>
+    <p class="lede">Session b1 said "use the standard keys" and deferred the keys to today. The reason it is worth a whole session is that conventional attribute names are the only part of your telemetry that ports. Duration and parenting come free from any tracer. The names are the interface between your code and every dashboard, every alert, every sampling policy and every vendor you might move to next year - and getting one of them wrong is silent. A misspelled attribute does not error. It just never appears in the query you write eighteen months later during an incident.</p>
+    <div class="legend">
+      <span class="pill solid">Live - presented in session</span>
+      <span class="pill light">Self-study - read after class</span>
+      <span class="pill inkpill">Official sources covered</span>
+    </div>
+    <div class="callout win">
+      <strong>★ What you walk out with today</strong>
+      The three changes that invalidate most published guidance, a deprecated-to-current trap table you can grep your codebase against, the five span-name templates spelled exactly, the inference attribute set grouped by requirement level, the five attributes a head sampler can act on, and a working map of OpenInference as the other dialect.
+    </div>
+    <div class="callout warn">
+      <strong>Read this before you trust anything below</strong>
+      Every span, metric, event and attribute in the GenAI semantic conventions carries status <code>Development</code>. The dedicated repo has no git tags and no releases, which means there is no version number for you to pin and no release notes to diff. Everything on this page was read from the repository on 13 August 2026. Treat it as correct on that date and as a habit rather than a fact: the skill this session actually teaches is going to the registry yourself.
+    </div>
+  </section>
+
+  <!-- ============ PART 1 ============ -->
+  <section class="section" id="moved">
+    <div class="section-kicker">
+      <span class="klabel">Part 1 · what moved</span>
+      <h2>Three things that invalidate most blog posts <span class="tag concept">7 min live</span></h2>
+    </div>
+    <p class="lede">If you take nothing else from today, take these three. Each one is a specific, checkable claim, and each one is something you can find in a currently published tutorial written with complete confidence.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 320" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Three changes: the GenAI conventions moved to a dedicated repository, gen_ai.system was replaced by gen_ai.provider.name, and nothing in the spec is stable because there are no tags or releases.">
+        <style>
+          .mvT { font: 700 12.5px Inter, sans-serif; fill: #FFFFFF; }
+          .mvS { font: 400 11px Inter, sans-serif; fill: #AFC0E4; }
+          .mvX { font: 400 11px Inter, sans-serif; fill: #66707E; }
+          .mvM { font: 400 11px ui-monospace, Menlo, monospace; fill: #16305C; }
+          .mvK { font: 600 12.5px Inter, sans-serif; fill: #08323A; }
+        </style>
+
+        <rect x="24" y="24" width="200" height="68" rx="10" fill="#0C1F3F"/>
+        <text class="mvT" x="42" y="52">1 · The repo moved</text>
+        <text class="mvS" x="42" y="70">new address</text>
+        <rect x="240" y="24" width="616" height="68" rx="10" fill="#EDF2FB" stroke="#AFC0E4" stroke-width="1.5"/>
+        <text class="mvX" x="258" y="45">The conventions left the main semconv docs for their own repository:</text>
+        <text class="mvM" x="258" y="63">open-telemetry/semantic-conventions-genai</text>
+        <text class="mvX" x="258" y="81">The opentelemetry.io gen-ai page is now a redirect notice.</text>
+
+        <rect x="24" y="100" width="200" height="68" rx="10" fill="#16305C"/>
+        <text class="mvT" x="42" y="128">2 · A name vanished</text>
+        <text class="mvS" x="42" y="146">zero hits in registry</text>
+        <rect x="240" y="100" width="616" height="68" rx="10" fill="#EDF2FB" stroke="#AFC0E4" stroke-width="1.5"/>
+        <text class="mvM" x="258" y="121">gen_ai.system   -&gt;   gen_ai.provider.name   (Required)</text>
+        <text class="mvX" x="258" y="139">It appears zero times in the current registry. If a page tells you to set</text>
+        <text class="mvX" x="258" y="157">gen_ai.system, that page was written against the 2024 or 2025 spec.</text>
+
+        <rect x="24" y="176" width="200" height="68" rx="10" fill="#0891A6"/>
+        <text class="mvT" x="42" y="204">3 · Nothing is stable</text>
+        <text class="mvS" x="42" y="222" fill="#E4F6F9">no tags, no releases</text>
+        <rect x="240" y="176" width="616" height="68" rx="10" fill="#E4F6F9" stroke="#0891A6" stroke-width="1.5"/>
+        <text class="mvX" x="258" y="197">Every span, metric, event and attribute carries status Development, and</text>
+        <text class="mvX" x="258" y="215">the new repo has no git tags and no releases. There is no version to pin,</text>
+        <text class="mvX" x="258" y="233">so there is no such thing as "the stable name". Check the repo per cohort.</text>
+
+        <rect x="24" y="258" width="832" height="44" rx="10" fill="#FFFFFF" stroke="#C7CFDA" stroke-width="1.5"/>
+        <rect x="42" y="272" width="14" height="14" rx="3" fill="#0891A6"/>
+        <text class="mvK" x="66" y="284">There is no stable GenAI convention. There is only today's, read from the repo.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - the three changes that date a piece of writing instantly</figcaption>
+    </figure>
+
+    <details class="card" open>
+      <summary><span class="mode live">Live</span>The deprecated-to-current trap table<span class="mini">5 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>Grep your codebase for the left column. Everything you find is either dead or reporting into a query nobody maintains any more.</p>
+        <table class="clean">
+          <tr><th>Old name, still all over the internet</th><th>Current name</th><th>Note</th></tr>
+          <tr><td><code>gen_ai.system</code></td><td><code>gen_ai.provider.name</code></td><td>Required. Zero occurrences of the old name in the current registry</td></tr>
+          <tr><td><code>gen_ai.usage.prompt_tokens</code></td><td><code>gen_ai.usage.input_tokens</code></td><td>Straight rename</td></tr>
+          <tr><td><code>gen_ai.usage.completion_tokens</code></td><td><code>gen_ai.usage.output_tokens</code></td><td>Straight rename</td></tr>
+          <tr><td><code>gen_ai.prompt</code></td><td><strong>No replacement.</strong> Use <code>gen_ai.input.messages</code></td><td><strong>Obsoleted</strong>, with the words "no replacement at this time". The structured messages attribute is the thing to reach for, but it is not a rename and the shapes differ</td></tr>
+          <tr><td><code>gen_ai.completion</code></td><td><strong>No replacement.</strong> Use <code>gen_ai.output.messages</code></td><td>Obsoleted, same story</td></tr>
+          <tr><td>Five per-role events, <code>gen_ai.user.message</code> and friends</td><td>One event: <code>gen_ai.client.inference.operation.details</code></td><td>Deprecated. The five collapsed into one</td></tr>
+        </table>
+        <p>That last row is the fastest dating test there is. <strong>If a page shows you five <code>gen_ai.*.message</code> events, it is describing the 2024 or 2025 spec</strong>, and you should assume everything else on the page is the same vintage. One event now carries the operation detail, and content rides on it or on the span.</p>
+        <p>Note the asymmetry between rows two and four. The token renames are safe mechanical substitutions. The content attributes are not: <code>gen_ai.prompt</code> was obsoleted rather than renamed, and the registry says so in those words. <code>gen_ai.input.messages</code> is a structured attribute with a mandatory JSON schema, not a string, and it is Opt-In rather than Recommended. Swapping the name without changing the shape produces telemetry that validates against nothing.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode self">Self-study</span>Why a moving spec is still worth adopting<span class="mini">3 min read</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>The reasonable objection to everything above is: if none of it is stable, why not invent my own names and be done with it? Three answers, in increasing order of how much they will matter to you.</p>
+        <ul>
+          <li><strong>Renames are mechanical, inventions are not.</strong> <code>prompt_tokens</code> to <code>input_tokens</code> is a find-and-replace plus a dashboard edit. Migrating off a bespoke schema means re-deriving what you meant, usually from memory, usually during a migration you did not plan.</li>
+          <li><strong>The tooling reads these names.</strong> Grafana's AI dashboards, tail-sampling policies, and every LLM-aware backend key off <code>gen_ai.*</code>. Bespoke names mean you write the dashboards too.</li>
+          <li><strong>The requirement levels encode judgement you do not have to repeat.</strong> Someone already argued about whether temperature belongs on a span, whether tool arguments are sensitive, and which five attributes a sampler can afford to look at. Adopting the names adopts the arguments.</li>
+        </ul>
+        <p>The honest position is: adopt the conventions, wrap the attribute keys in constants in one file, and expect to change that file once or twice a year. Do not scatter string literals through your codebase, because the whole point of a Development-status spec is that the strings will move.</p>
+      </div>
+    </details>
+  </section>
+
+  <!-- ============ PART 2 ============ -->
+  <section class="section" id="naming">
+    <div class="section-kicker">
+      <span class="klabel">Part 2 · span names</span>
+      <h2>Five templates, and the retry rule <span class="tag concept">6 min live</span></h2>
+    </div>
+    <p class="lede">Span names are not free text and they are not function names. Each GenAI span type has a template, and the template exists because the name becomes a dashboard row, a group-by key and a sampling predicate. b1 said "name it for the operation". Here is what the spec means by that, exactly.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 412" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="The five GenAI span name templates with their span kinds, and a diagram showing that one span covers a whole logical operation including automatic retries.">
+        <style>
+          .snH { font: 700 11px Inter, sans-serif; fill: #FFFFFF; }
+          .snN { font: 700 12.5px Inter, sans-serif; fill: #1B2230; }
+          .snM { font: 400 11px ui-monospace, Menlo, monospace; fill: #16305C; }
+          .snW { font: 400 11px ui-monospace, Menlo, monospace; fill: #FFFFFF; }
+          .snS { font: 400 10px ui-monospace, Menlo, monospace; fill: #16305C; }
+          .snX { font: 400 11px Inter, sans-serif; fill: #66707E; }
+          .snC { font: 400 11px Inter, sans-serif; fill: #08323A; }
+          .snL { font: 700 13px Inter, sans-serif; fill: #1B2230; }
+          .snK { font: 600 12.5px Inter, sans-serif; fill: #08323A; }
+        </style>
+
+        <rect x="24" y="20" width="832" height="28" rx="6" fill="#0C1F3F"/>
+        <text class="snH" x="40" y="39">Span</text>
+        <text class="snH" x="196" y="39">Name template</text>
+        <text class="snH" x="664" y="39">Span kind</text>
+
+        <rect x="24" y="48" width="832" height="42" fill="#EDF2FB"/>
+        <text class="snN" x="40" y="74">Inference</text>
+        <text class="snM" x="196" y="74">{gen_ai.operation.name} {gen_ai.request.model}</text>
+        <text class="snX" x="664" y="74">CLIENT (or INTERNAL)</text>
+
+        <rect x="24" y="90" width="832" height="42" fill="#FFFFFF"/>
+        <text class="snN" x="40" y="116">Tool</text>
+        <text class="snM" x="196" y="116">execute_tool {gen_ai.tool.name}</text>
+        <text class="snX" x="664" y="116">INTERNAL</text>
+
+        <rect x="24" y="132" width="832" height="42" fill="#EDF2FB"/>
+        <text class="snN" x="40" y="158">Agent</text>
+        <text class="snM" x="196" y="158">invoke_agent {gen_ai.agent.name}</text>
+        <text class="snX" x="664" y="158">CLIENT or INTERNAL</text>
+
+        <rect x="24" y="174" width="832" height="42" fill="#FFFFFF"/>
+        <text class="snN" x="40" y="200">Workflow</text>
+        <text class="snM" x="196" y="200">invoke_workflow {gen_ai.workflow.name}</text>
+        <text class="snX" x="664" y="200">INTERNAL</text>
+
+        <rect x="24" y="216" width="832" height="42" fill="#EDF2FB"/>
+        <text class="snN" x="40" y="242">Plan</text>
+        <text class="snM" x="196" y="242">plan {gen_ai.agent.name}</text>
+        <text class="snX" x="664" y="242">INTERNAL</text>
+
+        <text class="snL" x="24" y="292">One span, one logical operation - the retries live inside it</text>
+
+        <rect x="24" y="302" width="552" height="32" rx="8" fill="#16305C"/>
+        <text class="snW" x="40" y="322">chat claude-sonnet-4-5   2.9s   ONE span</text>
+
+        <rect x="40" y="340" width="120" height="22" rx="5" fill="#EDF2FB" stroke="#AFC0E4" stroke-width="1.2"/>
+        <text class="snS" x="52" y="355">try 1  429</text>
+        <rect x="168" y="340" width="120" height="22" rx="5" fill="#EDF2FB" stroke="#AFC0E4" stroke-width="1.2"/>
+        <text class="snS" x="180" y="355">try 2  429</text>
+        <rect x="296" y="340" width="160" height="22" rx="5" fill="#EDF2FB" stroke="#AFC0E4" stroke-width="1.2"/>
+        <text class="snS" x="308" y="355">try 3  200 OK</text>
+
+        <rect x="600" y="302" width="256" height="62" rx="10" fill="#E4F6F9" stroke="#0891A6" stroke-width="1.5"/>
+        <text class="snC" x="616" y="324">Three HTTP attempts, one span.</text>
+        <text class="snC" x="616" y="340">Retries are not siblings and</text>
+        <text class="snC" x="616" y="356">not children. They vanish.</text>
+
+        <rect x="24" y="382" width="14" height="14" rx="3" fill="#0891A6"/>
+        <text class="snK" x="48" y="394">If your trace shows one span per HTTP attempt, you are not following the spec.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - the five name templates, and where automatic retries go</figcaption>
+    </figure>
+
+    <div class="callout tip">
+      <strong>The retry consequence, stated plainly</strong>
+      One span covers the whole logical operation <strong>including automatic retries</strong>. That is a deliberate, defensible choice, and it also means the retry count is invisible unless you put it on the span as an attribute of your own. A span that took 2.9 seconds because the SDK retried twice looks identical to a span that took 2.9 seconds because the model was slow. b6 treats cascading retries as a named failure mode for exactly this reason.
+    </div>
+
+    <details class="card" open>
+      <summary><span class="mode live">Live</span>The two enum-valued Required attributes<span class="mini">3 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>Both Required attributes are enumerations with well-known values, which is what makes them safe as metric dimensions and as sampler predicates. Use the well-known value when one fits; the spec permits others, but every value you invent is a value no dashboard knows about.</p>
+        <table class="clean">
+          <tr><th>Attribute</th><th>Well-known values</th></tr>
+          <tr><td><code>gen_ai.operation.name</code><br><span style="font-weight:400">18 well-known values</span></td><td><code>chat</code>, <code>embeddings</code>, <code>execute_tool</code>, <code>invoke_agent</code>, <code>invoke_workflow</code>, <code>plan</code>, <code>retrieval</code>, <code>text_completion</code>, <code>generate_content</code>, <code>fetch_response</code>, plus the memory family</td></tr>
+          <tr><td><code>gen_ai.provider.name</code><br><span style="font-weight:400">16 well-known values</span></td><td><code>anthropic</code>, <code>openai</code>, <code>aws.bedrock</code>, <code>gcp.vertex_ai</code>, <code>azure.ai.openai</code>, <code>cohere</code>, <code>deepseek</code>, <code>groq</code>, <code>mistral_ai</code>, <code>x_ai</code>, <code>perplexity</code>, and others</td></tr>
+        </table>
+        <p>Two things worth noticing. First, <code>execute_tool</code>, <code>invoke_agent</code>, <code>invoke_workflow</code> and <code>plan</code> appear both as span-name prefixes and as operation-name values, which is not redundant: the name is for humans reading a waterfall, the attribute is for machines grouping one. Set both.</p>
+        <p>Second, <code>gen_ai.provider.name</code> distinguishes the provider from the hosting platform, which is why <code>aws.bedrock</code>, <code>gcp.vertex_ai</code> and <code>azure.ai.openai</code> are values in their own right. If you call Claude through Bedrock, the platform is what your telemetry can actually observe, and b9 will show you why that distinction matters when one platform degrades and another does not.</p>
+      </div>
+    </details>
+  </section>
+
+  <!-- ============ PART 3 ============ -->
+  <section class="section" id="attributes">
+    <div class="section-kicker">
+      <span class="klabel">Part 3 · the attribute set</span>
+      <h2>Requirement levels, and the five a sampler can see <span class="tag concept">8 min live</span></h2>
+    </div>
+    <p class="lede">This is the table you will screenshot. The grouping is the spec's own, and the grouping is the interesting part: requirement level is not a measure of usefulness, it is a statement about when an instrumentation is allowed to omit something. Read the Conditionally Required group as "required, when the condition holds" rather than as "optional".</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 506" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Inference span attributes grouped by requirement level: Required, Conditionally Required, Recommended, Opt-In, plus the five sampling-time attributes a head sampler can act on.">
+        <style>
+          .atT { font: 700 12.5px Inter, sans-serif; fill: #FFFFFF; }
+          .atS { font: 400 11px Inter, sans-serif; fill: #AFC0E4; }
+          .atM { font: 400 11px ui-monospace, Menlo, monospace; fill: #16305C; }
+          .atC { font: 400 11px ui-monospace, Menlo, monospace; fill: #08323A; }
+          .atX { font: 400 10.5px Inter, sans-serif; fill: #66707E; }
+          .atY { font: 600 10.5px Inter, sans-serif; fill: #08323A; }
+          .atH { font: 600 12.5px Inter, sans-serif; fill: #08323A; }
+        </style>
+
+        <rect x="24" y="24" width="176" height="52" rx="10" fill="#0C1F3F"/>
+        <text class="atT" x="40" y="46">Required</text>
+        <text class="atS" x="40" y="64">always, both</text>
+        <rect x="208" y="24" width="648" height="52" rx="10" fill="#EDF2FB" stroke="#AFC0E4" stroke-width="1.5"/>
+        <text class="atM" x="224" y="46">gen_ai.operation.name    gen_ai.provider.name</text>
+        <text class="atX" x="224" y="66">Two names. Both enumerated, both low cardinality, both safe as metric labels.</text>
+
+        <rect x="24" y="84" width="176" height="102" rx="10" fill="#16305C"/>
+        <text class="atT" x="40" y="106">Conditionally</text>
+        <text class="atT" x="40" y="124">Required</text>
+        <text class="atS" x="40" y="142">when it applies</text>
+        <rect x="208" y="84" width="648" height="102" rx="10" fill="#EDF2FB" stroke="#AFC0E4" stroke-width="1.5"/>
+        <text class="atM" x="224" y="104">error.type   gen_ai.conversation.id   gen_ai.output.type</text>
+        <text class="atM" x="224" y="122">gen_ai.request.model   gen_ai.request.stream   gen_ai.request.seed</text>
+        <text class="atM" x="224" y="140">gen_ai.request.choice.count   gen_ai.request.top_k   server.port</text>
+        <text class="atM" x="224" y="158">gen_ai.prompt.name   gen_ai.prompt.version</text>
+        <text class="atY" x="224" y="176">error.type is the one Stable attribute in the whole set. Everything else is Development.</text>
+
+        <rect x="24" y="194" width="176" height="118" rx="10" fill="#3F62A8"/>
+        <text class="atT" x="40" y="216">Recommended</text>
+        <text class="atS" x="40" y="234" fill="#EDF2FB">set it if you can</text>
+        <rect x="208" y="194" width="648" height="118" rx="10" fill="#EDF2FB" stroke="#AFC0E4" stroke-width="1.5"/>
+        <text class="atM" x="224" y="214">gen_ai.usage.input_tokens        gen_ai.usage.output_tokens</text>
+        <text class="atM" x="224" y="232">gen_ai.usage.cache_read.input_tokens      gen_ai.usage.reasoning.output_tokens</text>
+        <text class="atM" x="224" y="250">gen_ai.usage.cache_creation.input_tokens   gen_ai.response.finish_reasons</text>
+        <text class="atM" x="224" y="268">gen_ai.request.temperature   gen_ai.response.model   server.address</text>
+        <text class="atY" x="224" y="288">cache_read and cache_creation input tokens are INCLUDED IN input_tokens - do not add</text>
+        <text class="atX" x="224" y="304">Eleven more request and response parameters are Recommended - full table below.</text>
+
+        <rect x="24" y="320" width="176" height="88" rx="10" fill="#0891A6"/>
+        <text class="atT" x="40" y="342">Opt-In</text>
+        <text class="atS" x="40" y="360" fill="#E4F6F9">sensitive, off</text>
+        <rect x="208" y="320" width="648" height="88" rx="10" fill="#E4F6F9" stroke="#0891A6" stroke-width="1.5"/>
+        <text class="atC" x="224" y="340">gen_ai.input.messages   gen_ai.output.messages</text>
+        <text class="atC" x="224" y="358">gen_ai.system_instructions   gen_ai.tool.definitions</text>
+        <text class="atC" x="224" y="376">gen_ai.prompt.variable.&lt;key&gt;</text>
+        <text class="atY" x="224" y="394">Off by default. Instrumentations SHOULD NOT capture these unless you opt in. See b10.</text>
+
+        <rect x="24" y="420" width="832" height="70" rx="10" fill="#FFFFFF" stroke="#0891A6" stroke-width="1.5"/>
+        <text class="atH" x="40" y="442">The sampling-time set - SHOULD be present when the span is created</text>
+        <text class="atC" x="40" y="462">gen_ai.operation.name   gen_ai.provider.name   gen_ai.request.model   server.address   server.port</text>
+        <text class="atX" x="40" y="482">The low-cardinality head. This is the only set a head sampler can act on - see b7.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - the inference attribute set by requirement level, and the sampling-time head</figcaption>
+    </figure>
+
+    <details class="card" open>
+      <summary><span class="mode live">Live</span>The full inference-span table, as the registry groups it<span class="mini">5 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <table class="clean">
+          <tr><th>Level</th><th>Attributes</th><th>What the level is telling you</th></tr>
+          <tr><td><strong>Required</strong></td><td><code>gen_ai.operation.name</code><br><code>gen_ai.provider.name</code></td><td>A GenAI inference span without these two is not a GenAI inference span. They are also the two things every aggregate query groups by</td></tr>
+          <tr><td><strong>Conditionally Required</strong></td><td><code>error.type</code> if the operation errored<br><code>gen_ai.conversation.id</code><br><code>gen_ai.output.type</code><br><code>gen_ai.request.model</code> if available<br><code>gen_ai.request.stream</code> if and only if streaming<br><code>gen_ai.request.seed</code><br><code>gen_ai.request.choice.count</code> if not 1<br><code>gen_ai.request.top_k</code><br><code>gen_ai.prompt.name</code> and <code>gen_ai.prompt.version</code><br><code>server.port</code> if <code>server.address</code> is set</td><td>Each has a stated condition. <code>error.type</code> is the standout: it is the one <strong>Stable</strong> attribute in the whole set, which tells you the general error convention settled long before the GenAI one did. <code>gen_ai.request.choice.count</code> only appears when it is not 1, so absence means one choice rather than unknown</td></tr>
+          <tr><td><strong>Recommended</strong></td><td><code>gen_ai.request.max_tokens</code>, <code>.temperature</code>, <code>.top_p</code>, <code>.frequency_penalty</code>, <code>.presence_penalty</code>, <code>.stop_sequences</code>, <code>.reasoning.level</code><br><code>gen_ai.response.finish_reasons</code> (array), <code>.id</code>, <code>.model</code>, <code>.time_to_first_chunk</code> in seconds if streaming<br><code>gen_ai.usage.input_tokens</code>, <code>.output_tokens</code>, <code>.cache_read.input_tokens</code>, <code>.cache_creation.input_tokens</code>, <code>.reasoning.output_tokens</code><br><code>server.address</code><br><code>gen_ai.conversation.compacted</code></td><td>Recommended is where nearly all the diagnostic power lives, which is the mild joke of this table. The request parameters explain behaviour changes with no deploy. <code>gen_ai.response.model</code> next to <code>gen_ai.request.model</code> is how you catch a floating alias moving under you, which is b9. <code>gen_ai.conversation.compacted</code> is a positive indicator only: set it true or leave it off, never false</td></tr>
+          <tr><td><strong>Opt-In</strong></td><td><code>gen_ai.input.messages</code><br><code>gen_ai.output.messages</code><br><code>gen_ai.system_instructions</code><br><code>gen_ai.tool.definitions</code><br><code>gen_ai.prompt.variable.&lt;key&gt;</code></td><td>Opt-In means the instrumentation SHOULD NOT capture it by default but SHOULD give you a switch. This is a privacy posture expressed as a requirement level, and the whole of b10 unpacks it</td></tr>
+        </table>
+        <p>Two pieces of token guidance that are easy to miss and expensive to miss. <strong>Report the billed count</strong>, not your own tokeniser's estimate, which is the only number that reconciles with an invoice. And <strong><code>fetch_response</code> operations SHOULD NOT report token usage</strong> at all, because the tokens were billed on the original request and reporting them again double-counts.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode live">Live</span>The cache token trio, and why b4 depends on it<span class="mini">3 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>This is the single most consequential sentence in the attribute registry for anyone who has to explain a bill:</p>
+        <div class="prompt-box good">
+          <span class="label">★ The inclusion rule</span>
+          <p>gen_ai.usage.cache_read.input_tokens      is INCLUDED IN  gen_ai.usage.input_tokens
+gen_ai.usage.cache_creation.input_tokens  is INCLUDED IN  gen_ai.usage.input_tokens
+
+input_tokens is the total. The other two are breakdowns of it, not additions to it.</p>
+        </div>
+        <p>So the arithmetic for cost is a weighted split of one number, not a sum of three. If you add all three you over-report input tokens on every cached request, and the over-report scales with how well your caching works - your cost dashboard gets worse precisely as your caching gets better. b4 does the full cost model with real multipliers; today just get the inclusion direction right in your head.</p>
+        <p>Worth naming the second, sharper trap now so it does not surprise you in b4: what a provider reports as input tokens and what the OTel attribute means are not automatically the same thing, and provider-side cache breakpoints can make the raw <code>input_tokens</code> field describe only part of the prompt. Log the breakdown, not just the total, and reconcile against a real invoice once before you trust any dashboard built on it.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode self">Self-study</span>The tool span, which is smaller and sharper than you expect<span class="mini">3 min read</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <table class="clean">
+          <tr><th>Attribute</th><th>Level</th><th>Note</th></tr>
+          <tr><td><code>gen_ai.operation.name</code></td><td>Required</td><td>Value <code>execute_tool</code></td></tr>
+          <tr><td><code>gen_ai.tool.name</code></td><td>Required</td><td>Also the second half of the span name</td></tr>
+          <tr><td><code>error.type</code></td><td>Conditionally Required</td><td>The Stable one again</td></tr>
+          <tr><td><code>gen_ai.agent.name</code></td><td>Conditionally Required</td><td>Which agent called the tool</td></tr>
+          <tr><td><code>gen_ai.tool.call.id</code></td><td>Recommended</td><td>Joins the call to its result. Unbounded, so never a metric label</td></tr>
+          <tr><td><code>gen_ai.tool.type</code></td><td>Recommended</td><td><code>function</code> client-side, <code>extension</code> agent-side, <code>datastore</code></td></tr>
+          <tr><td><code>gen_ai.tool.call.arguments</code> and <code>gen_ai.tool.call.result</code></td><td><strong>Opt-In</strong></td><td>Treated as sensitive, and correctly so: tool arguments are very often where the account number is</td></tr>
+        </table>
+        <p>Six attributes and two switches. The important design point is that <code>gen_ai.tool.name</code> is Required while the arguments are Opt-In, which means the default tool span tells you <em>which</em> tool ran and nothing about <em>what it was asked</em>. That is enough to catch wrong-tool-selection and not enough to catch a malformed argument. b6 makes that trade explicit; b10 makes it a policy.</p>
+      </div>
+    </details>
+  </section>
+
+  <!-- ============ DEMO 1 ============ -->
+  <section class="section" id="demo-1">
+    <div class="section-kicker">
+      <span class="klabel">Demo 1 of 2</span>
+      <h2>Audit the Beacon support chatbot against the registry <span class="tag demo">★ 10 min · everyone builds</span></h2>
+    </div>
+    <p class="lede">Beacon's support chatbot has been instrumented for a year, by three different people, following whatever guide was top of the search results at the time. That is a normal codebase. Before adding anything, find out what it is actually emitting. This audit takes ten minutes and it usually finds two of the six trap-table rows.</p>
+
+    <div class="steps">
+      <div class="step"><p>Query your backend for the <strong>distinct attribute keys</strong> present on spans from the last thousand requests. Not the values, just the keys. Most platforms can do this; if yours cannot, dump one span as JSON and read the key list by hand. This list, not your code, is the truth about what you emit.</p></div>
+      <div class="step"><p>Grep the codebase for the left column of the trap table. Six strings: <code>gen_ai.system</code>, <code>prompt_tokens</code>, <code>completion_tokens</code>, <code>gen_ai.prompt</code>, <code>gen_ai.completion</code>, and <code>gen_ai.user.message</code>. Each hit is a place your telemetry is describing a spec that no longer exists.</p></div>
+      <div class="step"><p>Check the two Required attributes on every inference span. Not "we set the model", the two Required ones: <code>gen_ai.operation.name</code> and <code>gen_ai.provider.name</code>. A span missing either is not queryable as a GenAI span by any tool that follows the conventions, and the failure mode is that it silently drops out of every aggregate.</p></div>
+      <div class="step"><p>Check whether <code>error.type</code> ever appears. If it appears zero times across a thousand spans, either nothing has failed all week, or - overwhelmingly more likely - your failure path does not set it. Hold that thought until b6.</p></div>
+      <div class="step"><p>Write the results down as a three-column list: key you emit, current name, requirement level. That list is your migration ticket, and it is short enough to finish in an afternoon.</p></div>
+    </div>
+
+    <div class="prompt-box bad">
+      <span class="label">What the audit usually finds</span>
+      <p>gen_ai.system = "anthropic"              deprecated, appears zero times in the registry
+gen_ai.usage.prompt_tokens = 1841        renamed to gen_ai.usage.input_tokens
+gen_ai.prompt = "[{\"role\": ...}]"        obsoleted, no replacement, and Opt-In content on by mistake
+llm.model = "claude-sonnet-4-5"          bespoke. Not wrong, just invisible to every standard tool
+error.type                               absent. On 1,000 spans. Including the failing ones</p>
+    </div>
+
+    <div class="callout tip">
+      <strong>Do the constants file before the migration</strong>
+      Put every attribute key in one module as a named constant, then migrate. It costs twenty minutes and it turns the next rename from a codebase-wide grep into a one-file diff. Given a spec with no tags and no releases, assume there will be a next rename.
+    </div>
+  </section>
+
+  <!-- ============ DEMO 2 ============ -->
+  <section class="section" id="demo-2">
+    <div class="section-kicker">
+      <span class="klabel">Demo 2 of 2</span>
+      <h2>Emit one correct inference span on the Analyst Bot <span class="tag demo">★ 12 min · everyone builds</span></h2>
+    </div>
+    <p class="lede">The Analyst Bot turns a question into a warehouse query. Its model call is the span we are going to get exactly right, in the order the spec cares about: the sampling-time set first, at creation, then the response attributes on the way out, then the error path. The shape below is Python; the ordering argument is language-independent.</p>
+
+    <div class="steps">
+      <div class="step"><p><strong>Set the sampling-time set at span creation, not after.</strong> Five attributes: <code>gen_ai.operation.name</code>, <code>gen_ai.provider.name</code>, <code>gen_ai.request.model</code>, <code>server.address</code>, <code>server.port</code>. The spec says these SHOULD be present when the span is created because a head sampler decides at creation and cannot see anything you add later. Attributes added after the decision are invisible to sampling by construction.</p></div>
+      <div class="step"><p>Name the span from the template: <code>{gen_ai.operation.name} {gen_ai.request.model}</code>, so <code>chat claude-sonnet-4-5</code>. Note it is the <em>request</em> model in the name. The response model goes on as an attribute, and b9 is entirely about the day those two stop matching.</p></div>
+      <div class="step"><p>On the way out, set the response attributes: <code>gen_ai.response.id</code>, <code>gen_ai.response.model</code>, <code>gen_ai.response.finish_reasons</code> as an array, and the usage numbers. Report the <strong>billed</strong> counts. Add the cache breakdown if the provider gives it to you, remembering it is a breakdown of <code>input_tokens</code> and not an addition to it.</p></div>
+      <div class="step"><p>On the failure path, set <code>error.type</code>. It is Conditionally Required, it is the one Stable attribute you will touch today, and it is the difference between an error rate you can chart and an error rate you cannot.</p></div>
+      <div class="step"><p>Leave the content attributes off. <code>gen_ai.input.messages</code> and <code>gen_ai.output.messages</code> are Opt-In, off is the spec's default, and the decision to turn them on is a privacy and retention decision rather than an instrumentation one. b10 makes that decision properly.</p></div>
+      <div class="step"><p>Now check your own work the way the registry would: for every attribute you set, say out loud which requirement level it sits at. Anything you cannot place is either bespoke or misremembered.</p></div>
+    </div>
+
+    <div class="prompt-box good">
+      <span class="label">★ The shape - creation-time set, then response, then error</span>
+      <p>attrs = {
+    "gen_ai.operation.name": "chat",              # Required
+    "gen_ai.provider.name":  "anthropic",         # Required
+    "gen_ai.request.model":  model,               # sampling-time
+    "server.address":        "api.anthropic.com", # sampling-time
+    "server.port":           443,                 # sampling-time
+}
+with tracer.start_as_current_span(f"chat {model}", attributes=attrs) as span:
+    try:
+        resp = client.messages.create(...)
+        span.set_attribute("gen_ai.response.model", resp.model)
+        span.set_attribute("gen_ai.usage.input_tokens",  resp.usage.input_tokens)
+        span.set_attribute("gen_ai.usage.output_tokens", resp.usage.output_tokens)
+        span.set_attribute("gen_ai.response.finish_reasons", [resp.stop_reason])
+    except Exception as e:
+        span.set_attribute("error.type", type(e).__qualname__)
+        span.set_status(Status(StatusCode.ERROR))
+        raise</p>
+    </div>
+
+    <div class="callout warn">
+      <strong>The one line to argue about</strong>
+      <code>attributes=attrs</code> passed into <code>start_as_current_span</code> rather than five <code>set_attribute</code> calls afterwards. It reads as a style preference and it is not one: a head sampler runs at creation, so the same five attributes set one line later are invisible to it. This is the only place in the session where being pedantic about ordering changes what your pipeline can do, and it is why b7 keeps coming back to this five-attribute set.
+    </div>
+  </section>
+
+  <!-- ============ METRICS ============ -->
+  <section class="section" id="metrics">
+    <div class="section-kicker">
+      <span class="klabel">Part 4 · the other signal, briefly</span>
+      <h2>Metric names, and the powers-of-four buckets <span class="tag concept">4 min live</span></h2>
+    </div>
+    <p class="lede">The conventions define metrics as well as spans, and you should know the names now so you recognise them later. b8 does the alerting work; today is names, units and one design detail worth reading closely.</p>
+
+    <table class="clean">
+      <tr><th>Metric</th><th>Instrument</th><th>Unit</th><th>Buckets</th></tr>
+      <tr><td><code>gen_ai.client.token.usage</code></td><td>Histogram</td><td><code>{token}</code></td><td><strong>Powers of four</strong>: 1, 4, 16, 64, 256, 1024, 4096, 16384, 65536, 262144, 1048576, 4194304, 16777216, 67108864</td></tr>
+      <tr><td><code>gen_ai.client.operation.duration</code></td><td>Histogram</td><td><code>s</code></td><td>0.01 up to 81.92, fourteen doubling buckets</td></tr>
+      <tr><td><code>gen_ai.client.operation.time_to_first_chunk</code></td><td>Histogram</td><td><code>s</code></td><td>Same ladder as duration</td></tr>
+      <tr><td><code>gen_ai.client.operation.time_per_output_chunk</code></td><td>Histogram</td><td><code>s</code></td><td>Same ladder as duration</td></tr>
+      <tr><td><code>gen_ai.server.request.duration</code></td><td>Histogram</td><td><code>s</code></td><td>0.01 up to 81.92</td></tr>
+      <tr><td><code>gen_ai.server.time_to_first_token</code></td><td>Histogram</td><td><code>s</code></td><td>0.001 up to 10.0</td></tr>
+      <tr><td><code>gen_ai.server.time_per_output_token</code></td><td>Histogram</td><td><code>s</code></td><td>0.01 up to 2.5</td></tr>
+      <tr><td><code>gen_ai.invoke_workflow.duration</code></td><td>Histogram</td><td><code>s</code></td><td>1, 5, 10, 30, 60, 120, 300, 600, 1800, 3600, <strong>7200</strong></td></tr>
+      <tr><td><code>gen_ai.invoke_agent.duration</code></td><td>Histogram</td><td><code>s</code></td><td>0.1 up to 409.6</td></tr>
+      <tr><td><code>gen_ai.invoke_agent.inference_calls</code></td><td>Histogram</td><td><code>{inference_call}</code></td><td>1, 2, 4, 8, 16, 32, 64, <strong>128</strong></td></tr>
+      <tr><td><code>gen_ai.invoke_agent.tool_calls</code></td><td>Histogram</td><td><code>{tool_call}</code></td><td>1, 2, 4, 8, 16, 32, 64, <strong>128</strong></td></tr>
+      <tr><td><code>gen_ai.execute_tool.duration</code></td><td>Histogram</td><td><code>s</code></td><td>0.01 up to 81.92</td></tr>
+    </table>
+
+    <p><code>gen_ai.client.token.usage</code> requires <strong><code>gen_ai.token.type</code></strong>, whose values are <code>input</code> and <code>output</code>. That is why one metric covers both directions rather than two metrics: token type is a dimension, not a name. It also means every query you write against token usage must filter or group by <code>gen_ai.token.type</code>, or you will silently be summing prompts and completions together.</p>
+
+    <div class="callout tip">
+      <strong>Bucket boundaries are a spec author telling you what they expect to happen</strong>
+      Token counts bucketed in powers of four rather than powers of two, reaching 67 million. Workflow durations reaching <strong>two hours</strong>. Agent inference and tool call counts reaching <strong>128</strong>. Nobody chooses a 128-call bucket for a well-behaved system. Those two counters are how a runaway loop becomes visible on a dashboard without anyone opening a trace, which is b3's second reading rule and b8's best alert.
+    </div>
+
+    <details class="card">
+      <summary><span class="mode self">Self-study</span>What every metric attribute set deliberately leaves out<span class="mini">2 min read</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>Read the metric attribute lists and notice the absences: <strong>no conversation id, no response id, no user id, no tool call id</strong>. That is not an oversight, it is the cardinality guardrail written into the spec. Metric cost scales with the number of distinct time series, which is the Cartesian product of label values, so one unbounded label turns a cheap counter into an unbounded bill.</p>
+        <p><code>gen_ai.request.model</code> is bounded at tens of values and is safe. <code>gen_ai.conversation.id</code> is unbounded and is not. The rule that follows: unbounded identifiers are fine on spans and never acceptable as metric dimensions. b7 works through the arithmetic and the collector configuration that enforces it.</p>
+        <p>There is one more signal worth knowing exists: the event <code>gen_ai.evaluation.result</code>, with <code>gen_ai.evaluation.name</code>, <code>.score.value</code>, <code>.score.label</code> and <code>.explanation</code>. Evaluation is becoming part of the telemetry spec rather than a separate discipline, which is a genuinely interesting development and the spine of b9.</p>
+      </div>
+    </details>
+  </section>
+
+  <!-- ============ OPENINFERENCE ============ -->
+  <section class="section" id="openinference">
+    <div class="section-kicker">
+      <span class="klabel">Part 5 · the other dialect</span>
+      <h2>OpenInference, and the inverted default <span class="tag concept">6 min live</span></h2>
+    </div>
+    <p class="lede">You will meet a second vocabulary, and you will meet it sooner than you expect, because it is what several of the most widely used instrumentation packages emit. It is not a competitor standard in the sense of a different wire format: every OpenInference trace is a valid OTLP trace. It is a different set of names on the same envelope.</p>
+
+    <table class="clean">
+      <tr><th></th><th>OTel GenAI</th><th>OpenInference</th></tr>
+      <tr><td><strong>What marks the span</strong></td><td><code>gen_ai.operation.name</code> plus <code>gen_ai.provider.name</code></td><td><code>openinference.span.kind</code>, required on <strong>every</strong> span</td></tr>
+      <tr><td><strong>Span kinds</strong></td><td>Five named span shapes: inference, tool, agent, workflow, plan</td><td><strong>Ten</strong>: LLM, EMBEDDING, CHAIN, RETRIEVER, RERANKER, TOOL, AGENT, GUARDRAIL, <strong>EVALUATOR</strong>, <strong>PROMPT</strong></td></tr>
+      <tr><td><strong>Token counts</strong></td><td><code>gen_ai.usage.input_tokens</code>, <code>gen_ai.usage.output_tokens</code></td><td><code>llm.token_count.prompt</code>, <code>.completion</code>, <code>.total</code></td></tr>
+      <tr><td><strong>Cost</strong></td><td>Not in the spec at all. You derive it</td><td>First-class <code>llm.cost.*</code>, including cache read and cache write</td></tr>
+      <tr><td><strong>Graph topology</strong></td><td>Not modelled</td><td><code>graph.node.id</code>, <code>.name</code>, <code>.parent_id</code></td></tr>
+      <tr><td><strong>User identity</strong></td><td><strong>None.</strong> There is no <code>gen_ai.user.id</code></td><td><code>user.id</code></td></tr>
+      <tr><td><strong>Content by default</strong></td><td><strong>Opt-in, and OFF</strong></td><td><strong>ON</strong>, and you hide with <code>OPENINFERENCE_HIDE_*</code> flags, all defaulting to False</td></tr>
+      <tr><td><strong>Stability</strong></td><td>Development. No tags, no releases</td><td>Versioned and production-used</td></tr>
+    </table>
+
+    <div class="callout warn">
+      <strong>The single most consequential difference: the privacy default is inverted</strong>
+      OTel GenAI says instrumentations SHOULD NOT capture message content, and gives you a switch to turn it on. OpenInference captures content <strong>by default</strong> and gives you a family of <code>OPENINFERENCE_HIDE_*</code> flags to turn it off, every one of which defaults to False. So the same application, instrumented with two packages that both emit valid OTLP, has opposite data-protection postures out of the box. If you install an OpenInference package on Friday and nobody changes a flag, you are storing prompts on Monday. That is a policy decision made by a dependency, and b10 is where we deal with it properly.
+    </div>
+
+    <details class="card">
+      <summary><span class="mode self">Self-study</span>Which dialect to choose, and the honest answer<span class="mini">3 min read</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>The honest answer is that you often do not choose, because the dialect comes with the instrumentation package, and the package comes with whichever framework you are using. What you choose is where you normalise.</p>
+        <p>Notice that OpenInference has things the GenAI conventions simply lack: <code>user.id</code>, first-class cost, graph topology, and two span kinds - EVALUATOR and PROMPT - that describe parts of an LLM system the GenAI spec does not model as spans at all. Notice also that it is versioned, which for an operational dependency is worth real money.</p>
+        <p>Against that, <code>gen_ai.*</code> is what the generic tooling reads, what the tail-sampling examples are written against, and what a general-purpose APM will grow support for. And <strong>interop happens at the backend rather than at the producer</strong>: everyone emits OTLP and the platform normalises the names. Langfuse, for instance, documents reading OpenInference keys, <code>gen_ai.*</code> keys and MLflow keys.</p>
+        <p>So the practical rule: pick the dialect your instrumentation gives you, be consistent within one service, and put the normalisation in one place you control. What you must not do is emit both dialects from the same service and let each dashboard pick a favourite. a6 turns this into a buy-or-build decision.</p>
+      </div>
+    </details>
+  </section>
+
+  <!-- ============ HOMEWORK ============ -->
+  <section class="section" id="exercise">
+    <div class="section-kicker">
+      <span class="klabel">Homework</span>
+      <h2>Try it yourself - this week <span class="tag exercise">◐ 45-60 min total</span></h2>
+    </div>
+    <ul>
+      <li>Open <code>open-telemetry/semantic-conventions-genai</code> yourself and confirm three things from this page against the source: that <code>gen_ai.system</code> is absent from the registry, that <code>error.type</code> is marked Stable while its neighbours are Development, and that there are still no tags or releases. If any of the three has changed since 13 August 2026, you have just learned the actual lesson of this session.</li>
+      <li>Finish the Demo 1 audit on a real service and turn the output into a migration ticket with the three columns. Count the bespoke keys separately from the deprecated ones: deprecated keys are a rename, bespoke keys are a decision someone has to make.</li>
+      <li>Move every attribute key in one service into a constants module. Then measure how long the next rename would take. That number is your real coupling to a Development-status spec.</li>
+      <li>Write out the sampling-time set from memory, then check it. Five attributes. If you cannot reproduce them, b7 will not land, because every head-sampling policy you write has to live inside that list.</li>
+      <li>Find one published tutorial on instrumenting an LLM app and date it using only the trap table. Look for <code>gen_ai.system</code> and for five per-role message events. It is a two-minute exercise and it permanently changes how you read this genre of writing.</li>
+    </ul>
+  </section>
+
+  <!-- ============ SOURCES ============ -->
+  <section class="section" id="official">
+    <div class="section-kicker">
+      <span class="klabel">Source material</span>
+      <h2>Official sources covered</h2>
+    </div>
+    <p class="lede">Every name on this page was read from a primary source on 13 August 2026 and catalogued in this course's source map. Names are quoted, not paraphrased, because a paraphrased attribute name is a wrong attribute name.</p>
+    <div class="covered">
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">The move to <code>open-telemetry/semantic-conventions-genai</code>, and the redirect notice on the opentelemetry.io gen-ai page</span><span class="note">Part 1 · the reason most published guidance is stale</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">The deprecated registry: <code>gen_ai.system</code>, the token renames, the obsoleted content attributes, the collapsed message events</span><span class="note">Part 1 · the trap table, greppable</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">GenAI span conventions: the five name templates, span kinds, and one span per logical operation including retries</span><span class="note">Part 2 · with the enum values for both Required attributes</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Inference and tool span attributes with requirement levels, the sampling-time set, and the cache token inclusion rule</span><span class="note">Part 3 · the reference table for the whole course</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">GenAI metric conventions: names, units, bucket boundaries, the Required <code>gen_ai.token.type</code>, and the excluded identifiers</span><span class="note">Part 4 · named here, alerted on in b8</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">OpenInference as the second dialect: ten span kinds, <code>openinference.span.kind</code>, <code>llm.token_count.*</code>, <code>llm.cost.*</code>, <code>user.id</code>, the inverted content default</span><span class="note">Part 5 · the choice a dependency makes for you</span></div>
+      <div class="covered-row"><span class="status pill light">◐</span><span class="name">The agent, workflow and plan nesting rules, and which framework actually emits any of this</span><span class="note">Named here · the full shape and the framework landscape are b3</span></div>
+      <div class="covered-row"><span class="status pill light">◐</span><span class="name">Content capture: the three usage patterns, the environment variable nuance, the upload hook</span><span class="note">Level named here · the decision is b10</span></div>
+      <div class="covered-row"><span class="status pill light">◐</span><span class="name">Head and tail sampling policies over the sampling-time set</span><span class="note">Set introduced here · b7 does the sampling</span></div>
+    </div>
+  </section>
+
+  <!-- ============ QUIZ ============ -->
+  <section class="section" id="quiz">
+    <div class="section-kicker">
+      <span class="klabel">Check yourself</span>
+      <h2>Three questions before you go 🎯 <span class="tag exercise">◐ 90 seconds</span></h2>
+    </div>
+    <div class="quiz-q" data-answer="1">
+      <p class="qtext">1 · A well-written tutorial shows you five events named <code>gen_ai.user.message</code>, <code>gen_ai.assistant.message</code> and so on, and tells you to set <code>gen_ai.system</code>. What do you conclude?</p>
+      <button class="qopt" type="button">A · Both are valid alternatives to the newer names, so either works</button>
+      <button class="qopt" type="button">B · The page describes the 2024 or 2025 spec: the five events collapsed into one <code>gen_ai.client.inference.operation.details</code> event, and <code>gen_ai.system</code> now appears zero times in the registry, replaced by the Required <code>gen_ai.provider.name</code></button>
+      <button class="qopt" type="button">C · The tutorial is using OpenInference rather than OTel GenAI</button>
+      <p class="qwhy">Those two markers together date a page precisely, which is why they are worth memorising. Neither name is a valid alternative: one is deprecated in favour of a Required attribute, and the five per-role events were deprecated in favour of a single operation-details event. Option C is a real confusion but a different one, and OpenInference would be marked by <code>openinference.span.kind</code> rather than by either of these.</p>
+    </div>
+    <div class="quiz-q" data-answer="2">
+      <p class="qtext">2 · A request reports <code>gen_ai.usage.input_tokens</code> of 12,400 and <code>gen_ai.usage.cache_read.input_tokens</code> of 11,900. How many input tokens did the request use?</p>
+      <button class="qopt" type="button">A · 24,300 - the two attributes are separate counts and you add them</button>
+      <button class="qopt" type="button">B · 500, since the cached portion was not really processed</button>
+      <button class="qopt" type="button">C · 12,400 - cache_read and cache_creation input tokens are included in <code>input_tokens</code>, so they are a breakdown of that total rather than an addition to it</button>
+      <p class="qwhy">The inclusion direction is the whole answer, and getting it backwards produces a cost dashboard that degrades as your caching improves, which is a genuinely confusing way to be wrong. 11,900 of the 12,400 came from cache and are billed at a different rate, which is why you log the breakdown rather than only the total. Option B is the second trap: cached tokens are cheaper, not free, and they are still input tokens. b4 does the money.</p>
+    </div>
+    <div class="quiz-q" data-answer="0">
+      <p class="qtext">3 · You set <code>gen_ai.request.model</code> immediately after starting the span rather than passing it in at creation. What have you broken?</p>
+      <button class="qopt" type="button">A · Head sampling - the sampler decides at span creation and cannot see anything added afterwards, which is why the spec says the sampling-time set SHOULD be present when the span is created</button>
+      <button class="qopt" type="button">B · Nothing, as long as the attribute is on the span before it ends</button>
+      <button class="qopt" type="button">C · The span name template, which reads the attribute from the span</button>
+      <p class="qwhy">For a trace you keep, the attribute is on the span either way and nothing looks wrong. The damage is to a decision that already happened: a head sampler ran at creation with only what it could see. So your sampling policy silently cannot key off the model, the provider, the operation or the server address, and the symptom is a policy that appears to do nothing. Five attributes, set at creation: <code>gen_ai.operation.name</code>, <code>gen_ai.provider.name</code>, <code>gen_ai.request.model</code>, <code>server.address</code>, <code>server.port</code>.</p>
+    </div>
+    <p class="quiz-score"></p>
+  </section>
+
+  <!-- ============ CHEAT SHEET ============ -->
+  <section class="cheat" id="cheatsheet">
+    <h3>Builder session 2 cheat sheet <span>· pin this</span></h3>
+    <div class="grid-2">
+      <div class="cheat-item"><b>Where the spec lives now</b><span><code>open-telemetry/semantic-conventions-genai</code>. The opentelemetry.io gen-ai page is a redirect notice. No tags, no releases, nothing to pin.</span></div>
+      <div class="cheat-item"><b>The name that is gone</b><span><code>gen_ai.system</code> is deprecated and appears zero times in the registry. Use <code>gen_ai.provider.name</code>. It is Required.</span></div>
+      <div class="cheat-item"><b>The two Required attributes</b><span><code>gen_ai.operation.name</code> and <code>gen_ai.provider.name</code>. Both enumerated, both low cardinality, both on every inference span.</span></div>
+      <div class="cheat-item"><b>Span name templates</b><span><code>{operation} {request.model}</code> · <code>execute_tool {tool.name}</code> · <code>invoke_agent {agent.name}</code> · <code>invoke_workflow {workflow.name}</code> · <code>plan {agent.name}</code>.</span></div>
+      <div class="cheat-item"><b>One span, including retries</b><span>A span covers the whole logical operation. Automatic retries are inside it and invisible unless you add an attribute yourself.</span></div>
+      <div class="cheat-item"><b>The sampling-time five</b><span><code>gen_ai.operation.name</code>, <code>gen_ai.provider.name</code>, <code>gen_ai.request.model</code>, <code>server.address</code>, <code>server.port</code> - set at creation or a head sampler cannot see them.</span></div>
+      <div class="cheat-item"><b>Cache tokens are included</b><span><code>cache_read.input_tokens</code> and <code>cache_creation.input_tokens</code> are inside <code>input_tokens</code>. Split it, never sum it.</span></div>
+      <div class="cheat-item"><b>The inverted default</b><span>OTel GenAI content is Opt-In and OFF. OpenInference is ON by default and you hide with <code>OPENINFERENCE_HIDE_*</code>. Your dependency picks your privacy posture.</span></div>
+    </div>
+  </section>
+
+  <footer class="pagefoot">
+    <span>Builder session 2 of 10 · learn-ai-observability-with-phoebe · by Phoebe Fu &nbsp;·&nbsp; 📚 <a href="https://phoebefu6.github.io/learn-with-phoebe/">Learn with Phoebe ↗</a></span>
+    <span><a href="b1-spans-and-traces.html">← Previous: Spans and traces</a> &nbsp;·&nbsp; <a href="../index.html">Course home</a> &nbsp;·&nbsp; <a href="b3-instrumenting-an-agent.html">Next: Instrumenting an agent →</a></span>
+  </footer>
+
+</main>
+
+<script src="../assets/app.js?v=2"></script>
+</body>
+</html>

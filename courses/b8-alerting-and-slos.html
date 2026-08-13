@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Builder session 8 · Alerting and SLOs - learn ai observability with phoebe</title>
+<link rel="stylesheet" href="../assets/style.css?v=2">
+</head>
+<body>
+
+<div class="toolbar">
+  <div class="wrap">
+    <span class="crumb"><a href="../index.html">learn-ai-observability-with-phoebe</a> / Builder session 8 of 10</span>
+    <button class="btn" id="toggle-all" type="button">Expand all</button>
+    <button class="btn primary" id="zoom-toggle" type="button">Projector zoom: off</button>
+  </div>
+</div>
+
+<header class="masthead">
+  <div class="wrap">
+    <div class="eyebrow">Learn AI Observability with Phoebe · Builder track · Session 8 of 10</div>
+    <h1>Alerting and SLOs: <span class="accent">burn rate, not thresholds</span></h1>
+    <p class="sub">You now emit spans, attributes and metrics on a sampled stream. This session decides who gets woken up. The short version: almost every threshold you would reach for first is wrong on an LLM system, and it is wrong for five reasons that are specific to LLMs plus four that Google SRE wrote down for every system ever built. Burn rate fixes the four. Segmentation and assertion-verified success fix the five.</p>
+    <div class="chip-row">
+      <span class="chip level">🟠 Builder track</span>
+      <span class="chip audience">AI engineers · platform engineers · technical PMs</span>
+      <span class="chip time">45 min</span>
+    </div>
+    <div class="agenda">
+      <span class="a1" style="flex:1">0-3 · Welcome</span>
+      <span class="a2" style="flex:4">3-20 · Why thresholds misfire</span>
+      <span class="a3" style="flex:5">20-40 · Build-along: the rule, then the inventory</span>
+      <span class="a4" style="flex:1">40-45 · Q&amp;A</span>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <!-- ============ INTRO ============ -->
+  <section class="section" id="intro">
+    <div class="section-kicker">
+      <span class="klabel">Part 0</span>
+      <h2>The alert is the only part of observability that costs someone their sleep</h2>
+    </div>
+    <p class="lede">Everything before this session was about being able to answer a question. This session is about deciding which questions are urgent enough to ask a human at 03:00. That is a different discipline, and it is the one where a badly built observability stack does active harm rather than merely failing to help: a channel that fires 200 times a week gets muted, and a muted channel is worse than no channel because it looks like coverage.</p>
+    <div class="legend">
+      <span class="pill solid">Live - presented in session</span>
+      <span class="pill light">Self-study - read after class</span>
+      <span class="pill inkpill">Official sources covered</span>
+    </div>
+    <div class="callout win">
+      <strong>★ What you walk out with today</strong>
+      The five reasons a static threshold misfires specifically on an LLM system, Google SRE's four generic windowing failures with the arithmetic that proves them, the multi-window burn-rate table for a 99.9% SLO and why the alert needs both windows, one working burn-rate rule you can paste, and a fourteen-row alert inventory that says page, ticket or neither for every signal this course has taught you to emit.
+    </div>
+    <div class="callout tip">
+      <strong>One sentence for this session</strong>
+      Evals tell you whether it works. Observability tells you what actually happened. An alert is the narrow subset of "what actually happened" that is worth interrupting a person for, and burn rate is how you decide the width of that subset using arithmetic rather than taste.
+    </div>
+  </section>
+
+  <!-- ============ PART 1 ============ -->
+  <section class="section" id="five-reasons">
+    <div class="section-kicker">
+      <span class="klabel">Part 1 · the LLM-specific problem</span>
+      <h2>Five reasons a static threshold misfires here <span class="tag concept">6 min live</span></h2>
+    </div>
+    <p class="lede">Classic APM alerting assumes three things that an LLM endpoint quietly violates: that a status code tells you whether the request succeeded, that a metric is meaningful for one request, and that a single endpoint produces one distribution. All three are false, and each falsehood breaks a different threshold.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 406" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Five reasons static thresholds misfire on LLM systems: success is not a status code, the metric is noisy per request, latency and cost are multi-modal, ground truth moves without a deploy, and bursts trip quota limits.">
+        <style>
+          .b8aT { font: 700 12.5px Inter, sans-serif; fill: #FFFFFF; }
+          .b8aS { font: 400 11px Inter, sans-serif; fill: #AFC0E4; }
+          .b8aC { font: 400 11px Inter, sans-serif; fill: #E4F6F9; }
+          .b8aX { font: 400 11px Inter, sans-serif; fill: #66707E; }
+          .b8aK { font: 600 12.5px Inter, sans-serif; fill: #08323A; }
+        </style>
+
+        <rect x="24" y="24" width="200" height="52" rx="10" fill="#0C1F3F"/>
+        <text class="b8aT" x="42" y="46">Green is not success</text>
+        <text class="b8aS" x="42" y="64">a 200 can be empty</text>
+        <rect x="238" y="24" width="618" height="52" rx="10" fill="#EDF2FB" stroke="#AFC0E4" stroke-width="1.5"/>
+        <text class="b8aX" x="256" y="46">An HTTP 200 can carry an empty response, a refusal, a truncation or a confident</text>
+        <text class="b8aX" x="256" y="64">fabrication. Alert on assertion-verified task success, not on the status code.</text>
+
+        <rect x="24" y="88" width="200" height="52" rx="10" fill="#16305C"/>
+        <text class="b8aT" x="42" y="110">Noisy per request</text>
+        <text class="b8aS" x="42" y="128">1000 in, 80 outputs</text>
+        <rect x="238" y="88" width="618" height="52" rx="10" fill="#EDF2FB" stroke="#AFC0E4" stroke-width="1.5"/>
+        <text class="b8aX" x="256" y="110">1000 identical prompts at temperature 0 produced 80 distinct completions. Any</text>
+        <text class="b8aX" x="256" y="128">per-request quality threshold flaps. Alert quality as a rate over a sample.</text>
+
+        <rect x="24" y="152" width="200" height="52" rx="10" fill="#3F62A8"/>
+        <text class="b8aT" x="42" y="174">Multi-modal by design</text>
+        <text class="b8aS" x="42" y="192" fill="#EDF2FB">cache hit vs miss</text>
+        <rect x="238" y="152" width="618" height="52" rx="10" fill="#EDF2FB" stroke="#AFC0E4" stroke-width="1.5"/>
+        <text class="b8aX" x="256" y="174">Cache hit vs miss and 1-step vs 12-step are different distributions living in</text>
+        <text class="b8aX" x="256" y="192">one endpoint. A single p95 either screams or hides a mode. Segment first.</text>
+
+        <rect x="24" y="216" width="200" height="52" rx="10" fill="#3F62A8"/>
+        <text class="b8aT" x="42" y="238">Ground truth moves</text>
+        <text class="b8aS" x="42" y="256" fill="#EDF2FB">no deploy needed</text>
+        <rect x="238" y="216" width="618" height="52" rx="10" fill="#EDF2FB" stroke="#AFC0E4" stroke-width="1.5"/>
+        <text class="b8aX" x="256" y="238">The provider changes under you with no deploy of yours. The newer tokenizer</text>
+        <text class="b8aX" x="256" y="256">makes about 30% more tokens for the same text, so token limits shift. See b9.</text>
+
+        <rect x="24" y="280" width="200" height="52" rx="10" fill="#0891A6"/>
+        <text class="b8aT" x="42" y="302">Bursts trip quota</text>
+        <text class="b8aC" x="42" y="320">token bucket</text>
+        <rect x="238" y="280" width="618" height="52" rx="10" fill="#E4F6F9" stroke="#0891A6" stroke-width="1.5"/>
+        <text class="b8aX" x="256" y="302">A rate of 60 RPM may be enforced as 1 request per second, and acceleration</text>
+        <text class="b8aX" x="256" y="320">limits reject a ramp. Average utilisation shows headroom while you are throttled.</text>
+
+        <rect x="24" y="346" width="832" height="44" rx="10" fill="#FFFFFF" stroke="#C7CFDA" stroke-width="1.5"/>
+        <rect x="42" y="360" width="14" height="14" rx="3" fill="#0891A6"/>
+        <text class="b8aK" x="66" y="372">Static absolute thresholds survive for hard safety rails only: max steps, max spend.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - the five failures that are specific to an LLM endpoint</figcaption>
+    </figure>
+
+    <details class="card" open>
+      <summary><span class="mode live">Live</span>Success is not a status code, and this is the one that matters most<span class="mini">4 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>Everything else on this page is a tuning problem. This one is a category error, and it is the reason the Beacon incident held a green dashboard for a full working day. Four documented outcomes arrive as HTTP 200 with no error field set:</p>
+        <ul>
+          <li><strong>The empty response.</strong> A two or three token response with <code>stop_reason: "end_turn"</code>. Documented as happening particularly after tool results. Nothing errors, nothing is logged, and the response has no content in it.</li>
+          <li><strong>The refusal.</strong> <code>stop_reason: "refusal"</code> with <code>stop_details</code>, returned as HTTP 200 and not as an error. If refusal rate is not its own SLI, a policy change that starts refusing a whole customer segment is invisible to you.</li>
+          <li><strong>The truncation.</strong> <code>stop_reason: "max_tokens"</code> and <code>"model_context_window_exceeded"</code>. Treat both as truncated. The answer is well formed right up to the point where it stops mid-sentence.</li>
+          <li><strong>The confident fabrication.</strong> No signal at all in the response object. The only telemetry that catches it is an assertion against a source of truth, and almost nobody instruments that.</li>
+        </ul>
+        <p>So the first SLI you define is not availability and it is not latency. It is <strong>task success, verified by an assertion on the output</strong>, and it is the one you attach the fast-burn page to. Everything else on the inventory is supporting evidence.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode self">Self-study</span>Why segmenting before thresholding is not optional<span class="mini">3 min read</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>One endpoint, four legitimate populations: cache hit and cache miss, single-step and twelve-step. A cache read is priced at 0.1x base input and returns almost immediately; a 1-hour cache write is 2x. A twelve-step agent run can take two orders of magnitude longer than a one-step answer, which is why the spec's own <code>gen_ai.invoke_workflow.duration</code> histogram has a bucket at <strong>7200 seconds</strong>.</p>
+        <p>Mixing those into one p95 gives you a number that is not a property of any real request. Two consequences, both of which you have probably lived through:</p>
+        <ul>
+          <li>Set the threshold high enough to stop paging on legitimate long runs, and a total collapse of the fast cached path stays under it forever.</li>
+          <li>Set it where the cached path lives, and every long run pages you, so within a fortnight somebody widens the limit until it stops firing. That is the documented human response to a noisy alarm and it is how a monitored system becomes an unmonitored one.</li>
+        </ul>
+        <p>The fix is boring and it works: cut every latency and cost SLO by <code>gen_ai.request.model</code>, by cache-hit state, and by a coarse step-count bucket, then threshold inside each segment. The spec hands you the segmentation keys for free because they are the low-cardinality sampling-time attributes from b7.</p>
+      </div>
+    </details>
+  </section>
+
+  <!-- ============ PART 2 ============ -->
+  <section class="section" id="four-modes">
+    <div class="section-kicker">
+      <span class="klabel">Part 2 · the generic problem</span>
+      <h2>Google SRE's four failure modes, with the arithmetic <span class="tag concept">6 min live</span></h2>
+    </div>
+    <p class="lede">Before LLMs there was already a written proof that "alert when the error rate exceeds X for Y minutes" cannot be tuned into correctness. It fails on four axes at once, and every attempt to fix one of them makes another worse. This is the argument that produced burn-rate alerting, and the numbers below are the primary source's own.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 366" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Four failure modes of simple threshold alerting: precision, recall, detection time and reset time, each with the arithmetic that demonstrates it.">
+        <style>
+          .b8bH { font: 700 13px Inter, sans-serif; fill: #1B2230; }
+          .b8bT { font: 700 12.5px Inter, sans-serif; fill: #FFFFFF; }
+          .b8bM { font: 400 11px ui-monospace, Menlo, monospace; fill: #16305C; }
+          .b8bX { font: 400 11px Inter, sans-serif; fill: #66707E; }
+          .b8bK { font: 600 12.5px Inter, sans-serif; fill: #08323A; }
+        </style>
+
+        <text class="b8bH" x="24" y="30">Google SRE's four ways a simple threshold fails, with the arithmetic</text>
+
+        <rect x="24" y="44" width="170" height="56" rx="9" fill="#0C1F3F"/>
+        <text class="b8bT" x="38" y="76">Precision</text>
+        <rect x="204" y="44" width="252" height="56" rx="9" fill="#EDF2FB" stroke="#AFC0E4" stroke-width="1.5"/>
+        <text class="b8bM" x="218" y="66">0.1% errors for 10 minutes</text>
+        <text class="b8bM" x="218" y="86">burns 0.02% of the month</text>
+        <rect x="466" y="44" width="390" height="56" rx="9" fill="#FFFFFF" stroke="#C7CFDA" stroke-width="1.5"/>
+        <text class="b8bX" x="482" y="66">and it still pages you. Almost everything that</text>
+        <text class="b8bX" x="482" y="86">fires is not worth waking anyone for.</text>
+
+        <rect x="24" y="110" width="170" height="56" rx="9" fill="#16305C"/>
+        <text class="b8bT" x="38" y="142">Recall</text>
+        <rect x="204" y="110" width="252" height="56" rx="9" fill="#EDF2FB" stroke="#AFC0E4" stroke-width="1.5"/>
+        <text class="b8bM" x="218" y="132">100% spikes, 5 min in every 10</text>
+        <text class="b8bM" x="218" y="152">burn 35% of the budget</text>
+        <rect x="466" y="110" width="390" height="56" rx="9" fill="#FEF2F2" stroke="#FCA5A5" stroke-width="1.5"/>
+        <text class="b8bX" x="482" y="132" fill="#991B1B">and never trigger the alert at all. The worst</text>
+        <text class="b8bX" x="482" y="152" fill="#991B1B">outage of the month goes entirely unreported.</text>
+
+        <rect x="24" y="176" width="170" height="56" rx="9" fill="#3F62A8"/>
+        <text class="b8bT" x="38" y="208">Detection time</text>
+        <rect x="204" y="176" width="252" height="56" rx="9" fill="#EDF2FB" stroke="#AFC0E4" stroke-width="1.5"/>
+        <text class="b8bM" x="218" y="198">a 100% and a 0.2% outage</text>
+        <text class="b8bM" x="218" y="218">are detected at the same time</text>
+        <rect x="466" y="176" width="390" height="56" rx="9" fill="#FFFFFF" stroke="#C7CFDA" stroke-width="1.5"/>
+        <text class="b8bX" x="482" y="198">A window long enough to stay quiet is also far</text>
+        <text class="b8bX" x="482" y="218">too slow for the outage that actually matters.</text>
+
+        <rect x="24" y="242" width="170" height="56" rx="9" fill="#0891A6"/>
+        <text class="b8bT" x="38" y="274">Reset time</text>
+        <rect x="204" y="242" width="252" height="56" rx="9" fill="#E4F6F9" stroke="#0891A6" stroke-width="1.5"/>
+        <text class="b8bM" x="218" y="264">a long window keeps firing</text>
+        <text class="b8bM" x="218" y="284">after the incident is resolved</text>
+        <rect x="466" y="242" width="390" height="56" rx="9" fill="#FFFFFF" stroke="#C7CFDA" stroke-width="1.5"/>
+        <text class="b8bX" x="482" y="264">so the page you silence at 03:00 is the page</text>
+        <text class="b8bX" x="482" y="284">you needed at 03:20. This is how muting starts.</text>
+
+        <rect x="24" y="310" width="832" height="42" rx="10" fill="#FFFFFF" stroke="#C7CFDA" stroke-width="1.5"/>
+        <rect x="42" y="323" width="14" height="14" rx="3" fill="#0891A6"/>
+        <text class="b8bK" x="66" y="335">Every one of these is a windowing bug, not a threshold-value bug. Tuning cannot fix it.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - the four axes a single-window threshold fails on at once</figcaption>
+    </figure>
+
+    <div class="callout warn">
+      <strong>Read the recall row again</strong>
+      A series of 100% error spikes lasting 5 minutes every 10 minutes never triggers an alert, despite consuming 35% of the error budget. That is the primary source's own example. Half of every ten minutes is a total outage, a third of your month's budget is gone, and the pager is silent, because no averaging window you chose ever sees a sustained breach. If you take one thing from this part: the metric that is wrong is not the error rate, it is the window.
+    </div>
+  </section>
+
+  <!-- ============ PART 3 ============ -->
+  <section class="section" id="burn-rate">
+    <div class="section-kicker">
+      <span class="klabel">Part 3 · the fix</span>
+      <h2>Multi-window burn rate, and why both windows matter <span class="tag concept">7 min live</span></h2>
+    </div>
+    <p class="lede">Burn rate reframes the question. Instead of "is the error rate high", you ask "how fast am I spending this month's error budget, relative to the rate that would exactly exhaust it". Burn rate 1 means you finish the budget exactly at the end of the month. Burn rate 14.4 means you finish it in about two days. That single change of denominator fixes precision, recall and detection time, and the second window fixes reset time.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 362" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Three cases showing why a burn-rate alert requires both a long and a short window to exceed threshold: a brief blip does not page, a sustained burn does page, and a resolved incident clears within minutes.">
+        <style>
+          .b8cH { font: 700 13px Inter, sans-serif; fill: #1B2230; }
+          .b8cN { font: 700 12.5px Inter, sans-serif; fill: #1B2230; }
+          .b8cS { font: 400 11px Inter, sans-serif; fill: #66707E; }
+          .b8cM { font: 400 10.5px ui-monospace, Menlo, monospace; fill: #FFFFFF; }
+          .b8cX { font: 400 11px Inter, sans-serif; fill: #66707E; }
+          .b8cK { font: 600 12.5px Inter, sans-serif; fill: #08323A; }
+        </style>
+
+        <text class="b8cH" x="24" y="28">One 99.9% SLO, threshold burn rate 14.4, and the AND between two windows</text>
+        <text class="b8cS" x="24" y="52">budget rate = 0.1% of requests · burn rate = observed error rate divided by 0.1%</text>
+
+        <rect x="24" y="74" width="186" height="68" rx="9" fill="#EDF2FB" stroke="#AFC0E4" stroke-width="1.5"/>
+        <text class="b8cN" x="40" y="102">A brief 0.1% blip</text>
+        <text class="b8cS" x="40" y="120">ten minutes long</text>
+        <rect x="222" y="78" width="150" height="26" rx="6" fill="#3F62A8"/>
+        <text class="b8cM" x="236" y="95">1h burn  0.17x</text>
+        <rect x="222" y="112" width="150" height="26" rx="6" fill="#3F62A8"/>
+        <text class="b8cM" x="236" y="129">5m burn  1.0x</text>
+        <text class="b8cN" x="392" y="112">AND</text>
+        <rect x="440" y="78" width="416" height="60" rx="9" fill="#FFFFFF" stroke="#C7CFDA" stroke-width="1.5"/>
+        <text class="b8cX" x="456" y="102">No page. Neither window is near 14.4, and the event</text>
+        <text class="b8cX" x="456" y="120">cost 0.02% of the month. A naive rule would have paged.</text>
+
+        <rect x="24" y="152" width="186" height="68" rx="9" fill="#EDF2FB" stroke="#AFC0E4" stroke-width="1.5"/>
+        <text class="b8cN" x="40" y="180">Sustained 2% errors</text>
+        <text class="b8cS" x="40" y="198">still happening now</text>
+        <rect x="222" y="156" width="150" height="26" rx="6" fill="#991B1B"/>
+        <text class="b8cM" x="236" y="173">1h burn  20x</text>
+        <rect x="222" y="190" width="150" height="26" rx="6" fill="#991B1B"/>
+        <text class="b8cM" x="236" y="207">5m burn  20x</text>
+        <text class="b8cN" x="392" y="190">AND</text>
+        <rect x="440" y="156" width="416" height="60" rx="9" fill="#FEF2F2" stroke="#FCA5A5" stroke-width="1.5"/>
+        <text class="b8cX" x="456" y="180" fill="#991B1B">PAGE. Both windows are over 14.4, and at the moment it</text>
+        <text class="b8cX" x="456" y="198" fill="#991B1B">fires you have spent about 2% of the monthly budget.</text>
+
+        <rect x="24" y="230" width="186" height="68" rx="9" fill="#E4F6F9" stroke="#0891A6" stroke-width="1.5"/>
+        <text class="b8cN" x="40" y="258">Same incident, fixed</text>
+        <text class="b8cS" x="40" y="276">deploy landed at 03:20</text>
+        <rect x="222" y="234" width="150" height="26" rx="6" fill="#991B1B"/>
+        <text class="b8cM" x="236" y="251">1h burn  18x</text>
+        <rect x="222" y="268" width="150" height="26" rx="6" fill="#0891A6"/>
+        <text class="b8cM" x="236" y="285">5m burn  0x</text>
+        <text class="b8cN" x="392" y="268">AND</text>
+        <rect x="440" y="234" width="416" height="60" rx="9" fill="#E4F6F9" stroke="#0891A6" stroke-width="1.5"/>
+        <text class="b8cX" x="456" y="258">Alert clears in five minutes, not in an hour. The</text>
+        <text class="b8cX" x="456" y="276">short window is why nobody reaches for mute.</text>
+
+        <rect x="24" y="308" width="832" height="42" rx="10" fill="#FFFFFF" stroke="#C7CFDA" stroke-width="1.5"/>
+        <rect x="42" y="321" width="14" height="14" rx="3" fill="#0891A6"/>
+        <text class="b8cK" x="66" y="333">The long window earns the page. The short window is what lets you stop paging.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - burn rate, and the AND that makes the page trustworthy</figcaption>
+    </figure>
+
+    <p>The canonical table below is the primary source's own, for a 99.9% SLO. Three rules, two of them pages and one a ticket, each pairing a long window with a short window one twelfth its length. The "budget consumed" column is the honest cost of detection: by the time the fast rule fires you have already spent 2% of the month.</p>
+
+    <table class="clean">
+      <tr><th>Severity</th><th>Long window</th><th>Short window</th><th>Burn rate</th><th>Budget consumed when it fires</th></tr>
+      <tr><td><strong>Page</strong></td><td>1 hour</td><td>5 min</td><td><strong>14.4</strong></td><td>2%</td></tr>
+      <tr><td><strong>Page</strong></td><td>6 hours</td><td>30 min</td><td><strong>6</strong></td><td>5%</td></tr>
+      <tr><td><strong>Ticket</strong></td><td>3 days</td><td>6 hours</td><td><strong>1</strong></td><td>10%</td></tr>
+    </table>
+
+    <div class="callout tip">
+      <strong>The short window is not a second opinion, it is an off switch</strong>
+      Both windows must exceed the threshold for the rule to fire. The long window is what makes the page meaningful: a sustained 14.4x burn is genuinely worth someone's night. The short window exists so that the alert stops within five minutes of the system recovering instead of trailing the incident for an hour. Reset time is the failure mode that teaches engineers to distrust the pager, so it is the one worth spending a whole window on.
+    </div>
+  </section>
+
+  <!-- ============ DEMO 1 ============ -->
+  <section class="section" id="demo-1">
+    <div class="section-kicker">
+      <span class="klabel">Demo 1 of 2</span>
+      <h2>Write the rule that would have paged at 09:14 <span class="tag demo">★ 10 min · everyone builds</span></h2>
+    </div>
+    <p class="lede">Beacon's Insight Bot answered every request at 09:14 with a green 200 and a confident summary of nineteen-hour-old data. No availability alert could fire, because availability was perfect. Build the one rule that could have fired, on the one SLI that was actually broken.</p>
+
+    <div class="steps">
+      <div class="step"><p>Define the SLI as an assertion, not a status. For Insight Bot the assertion is cheap and specific: <strong>the answer cites at least one retrieved document, and the freshest cited document is under two hours old</strong>. Emit that as a boolean per task. Note what you just did: you turned "the answer was right" into something a counter can hold.</p></div>
+      <div class="step"><p>Pick the SLO and write down what the budget buys. 99.9% task success over 30 days allows 0.1% of tasks to fail. Beacon serves roughly 40,000 executive queries a month, so the budget is about 40 failed tasks. Say the number out loud in the SLO review: an SLO nobody can convert into a count of real failures never survives its first argument with a stakeholder.</p></div>
+      <div class="step"><p>Precompute the ratio at two window lengths. Do not compute burn rate inside the alert expression from raw counters; you want <code>ratio_rate5m</code> and <code>ratio_rate1h</code> as recording rules so that the alert reads like the table and so both windows come from the same definition.</p></div>
+      <div class="step"><p>Write the fast page as an AND of both windows against 14.4x the budget rate, then clone it for 6x over 6h/30m and 1x over 3d/6h as a ticket. Three rules, one SLI. Resist the urge to add a fourth.</p></div>
+      <div class="step"><p>Now test the recall case deliberately. Replay a load pattern of 100% failures for five minutes in every ten and confirm the burn-rate rule fires while a "5% errors for 10 minutes" threshold rule stays silent. That test is the whole argument for this session and it takes about ten minutes to build.</p></div>
+    </div>
+
+    <div class="prompt-box good">
+<span class="label">★ Fast-burn page · 99.9% task-success SLO · Beacon Insight Bot</span>
+# budget rate for a 99.9% SLO = 0.001
+# fast page: BOTH windows over 14.4x budget burn
+- alert: InsightBotTaskSuccessFastBurn
+  expr: |
+    (1 - task_success:ratio_rate1h{svc="insight_bot"}) &gt; (14.4 * 0.001)
+    and
+    (1 - task_success:ratio_rate5m{svc="insight_bot"}) &gt; (14.4 * 0.001)
+  labels:   { severity: page }
+  annotations:
+    summary: "burning 14.4x budget: 2% of the month already spent"
+
+# slow page: 6x over 6h AND 30m   -> severity page
+# ticket:    1x over 3d AND 6h    -> severity ticket, no pager
+    </div>
+
+    <div class="callout warn">
+      <strong>The trap in step 1, and it is worth being blunt about</strong>
+      Almost every team defines the SLI as availability first, because availability is the metric the platform hands you for free. Availability was 100% throughout the Beacon incident. If your alerting stack contains no assertion on output, then no amount of burn-rate arithmetic helps you: you are computing a beautifully windowed rate of a thing that never went wrong.
+    </div>
+  </section>
+
+  <!-- ============ DEMO 2 ============ -->
+  <section class="section" id="demo-2">
+    <div class="section-kicker">
+      <span class="klabel">Demo 2 of 2</span>
+      <h2>Build the alert inventory for Insight Bot <span class="tag demo">★ 12 min · everyone builds</span></h2>
+    </div>
+    <p class="lede">One rule is not an alerting strategy. The inventory below is the full set this course has taught you to emit, with a decision attached to each row: page, ticket, or neither. Copy it into a document, delete the rows you cannot currently compute, and the remainder is your instrumentation backlog with an urgency already attached.</p>
+
+    <div class="steps">
+      <div class="step"><p>Fill the third column honestly before you argue about thresholds. A row you cannot compute today is not an alert, it is a ticket in b2 to b7 territory. Most teams find they can compute five of fourteen.</p></div>
+      <div class="step"><p>Mark every page-severity row with a burn-rate pair and every ticket row with a plain window. The separation is the point: a page is a claim that a human must act within minutes, and there should be very few of them.</p></div>
+      <div class="step"><p>Segment the latency and cost rows before you set any number, using <code>gen_ai.request.model</code>, cache-hit state and a coarse step bucket. If a row cannot be segmented, downgrade it to a ticket rather than shipping a p95 that means nothing.</p></div>
+      <div class="step"><p>Write the policy document. One page per surface: what fires, who it wakes, what they are expected to do, and when it was last reviewed. The alarm-fatigue literature is unambiguous that the fix is a written, reviewed configuration policy assessed for completeness and relevance, not a cleverer threshold.</p></div>
+    </div>
+
+    <table class="clean">
+      <tr><th>What you alert on</th><th>Signal you compute it from</th><th>Page, ticket or neither</th></tr>
+      <tr><td><strong>Task success rate</strong></td><td>Your own assertion on the output. Never HTTP status</td><td><strong>Page</strong> · burn rate, 3 rules</td></tr>
+      <tr><td><strong>Error rate, 429 split out</strong></td><td><code>error.type</code> plus status class. Split because a 429 has a completely different fix from a 500</td><td><strong>Page</strong> · two separate rules</td></tr>
+      <tr><td><strong>Rate-limit headroom</strong></td><td>The <code>anthropic-ratelimit-*</code> header family. Alert on <code>-remaining</code> trending to zero, not on the 429 itself</td><td>Ticket, then page at zero</td></tr>
+      <tr><td><strong>TTFT</strong></td><td><code>gen_ai.client.operation.time_to_first_chunk</code>, <code>gen_ai.server.time_to_first_token</code></td><td>Page · its <strong>own</strong> SLO</td></tr>
+      <tr><td><strong>Total latency</strong></td><td><code>gen_ai.client.operation.duration</code>. A separate SLO from TTFT because prefill and decode move for different reasons</td><td>Page · its <strong>own</strong> SLO</td></tr>
+      <tr><td><strong>Cost per hour</strong></td><td>The token quartet plus model price. The only rule that catches a runaway spend inside the hour</td><td>Page · hard absolute cap</td></tr>
+      <tr><td><strong>Cost per successful task</strong></td><td>Mean attempt cost divided by success rate. Moves the right way when you fix reliability</td><td>Ticket · weekly review</td></tr>
+      <tr><td><strong>Refusal rate</strong></td><td><code>stop_reason: "refusal"</code>. Arrives as HTTP 200, so it is invisible to every error-rate rule you own</td><td><strong>Page</strong> · burn rate, segmented</td></tr>
+      <tr><td><strong>Guardrail trip rate</strong></td><td>Guardrail span or event count over request count</td><td>Ticket · page only on a step change</td></tr>
+      <tr><td><strong>Truncation rate</strong></td><td><code>stop_reason</code> of <code>max_tokens</code> or <code>model_context_window_exceeded</code>. Treat both as truncated</td><td>Ticket · leading indicator</td></tr>
+      <tr><td><strong>Eval-score drift on sampled traffic</strong></td><td><code>gen_ai.evaluation.result</code> with <code>gen_ai.evaluation.score.value</code></td><td><strong>Ticket, never a page.</strong> The sample is small and noisy</td></tr>
+      <tr><td><strong>Loop and step-count distribution</strong></td><td><code>gen_ai.invoke_agent.inference_calls</code> and <code>.tool_calls</code>. Buckets reach 128 precisely so a runaway is visible without opening a trace</td><td>Page on the tail crossing a hard cap</td></tr>
+      <tr><td><strong>Cache hit rate</strong></td><td>Share of <code>gen_ai.usage.cache_read.input_tokens</code>. Watch for a <strong>step change</strong>: a drop means a cache-invalidating change shipped</td><td>Page on step change · it is a cost incident</td></tr>
+      <tr><td><strong>Instrumentation coverage</strong></td><td>Traces missing an expected span type, and unaccounted time as a share of root duration</td><td>Ticket · its own incident class</td></tr>
+      <tr><td><strong><code>gen_ai.response.model</code> vs requested</strong></td><td>Both fields on the same span. A mismatch rate above zero means a floating alias moved under you</td><td>Page on mismatch rate · see b9</td></tr>
+    </table>
+
+    <div class="callout tip">
+      <strong>Where static absolute thresholds do belong</strong>
+      Burn rate is for quality-of-service objectives. It is the wrong tool for a hard safety rail, where the number is not negotiable and there is no budget to burn. Keep exactly three of those, as absolute caps that abort the run rather than notify anyone: <strong>max steps per task</strong>, <strong>max tokens per task</strong>, <strong>max spend per hour</strong>. They are not really alerts, they are circuit breakers with a notification attached, and they are the only place in this session where a fixed number is the right answer.
+    </div>
+  </section>
+
+  <!-- ============ HOMEWORK ============ -->
+  <section class="section" id="exercise">
+    <div class="section-kicker">
+      <span class="klabel">Homework</span>
+      <h2>Try it yourself - this week <span class="tag exercise">◐ 50-60 min total</span></h2>
+    </div>
+    <ul>
+      <li>Take your noisiest existing AI alert and compute, from last month's data, how much of the error budget the events it fired on actually consumed. If the answer is under 1%, you have found a precision failure and you can delete the rule this week with evidence rather than with a shrug.</li>
+      <li>Run the recall test from Demo 1 against your current alerting: 100% failures for five minutes in every ten, for an hour. If nothing fires, you have just reproduced the primary source's 35%-of-budget example in your own system, which is a far more persuasive artifact than this page.</li>
+      <li>Define one task-success SLI as an assertion on output for one AI feature, and write down the monthly failure count the SLO permits. Take that count, not the percentage, to whoever owns the feature.</li>
+      <li>Fill in the fourteen-row inventory for one service, honestly, in the third column. Count the rows you cannot compute today. That count is a better measure of your observability maturity than any dashboard screenshot.</li>
+      <li>Add the <code>gen_ai.response.model</code> versus requested-model comparison as a rule, even if you believe you pin every model. It costs one expression and it is the cheapest insurance in this course. Session b9 explains what it catches.</li>
+    </ul>
+  </section>
+
+  <!-- ============ SOURCES ============ -->
+  <section class="section" id="official">
+    <div class="section-kicker">
+      <span class="klabel">Source material</span>
+      <h2>Official sources covered</h2>
+    </div>
+    <p class="lede">Primary sources are marked <strong>[P]</strong> and secondary <strong>[S]</strong>. The burn-rate table and the four failure modes are quoted from the Google SRE workbook; the metric names and buckets come from the OpenTelemetry GenAI semantic conventions, which are all <code>Development</code> status with no tagged release, so re-verify the spellings before you build on them.</p>
+    <div class="covered">
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">[P] Google SRE multi-window burn-rate table for a 99.9% SLO: 14.4 / 6 / 1</span><span class="note">Part 3 · the table and the AND rule, verbatim structure</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">[P] SRE's four generic failure modes with their arithmetic, including the 35%-of-budget recall example</span><span class="note">Part 2 · all four numbers are the source's own</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">[P] Non-determinism: 1000 completions at temperature 0 produced 80 unique outputs</span><span class="note">Part 1 reason 2 · why per-request quality thresholds flap</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">[P] Token-bucket enforcement and acceleration limits: 60 RPM enforced as about 1 request per second</span><span class="note">Part 1 reason 5 · average utilisation hides throttling</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">[P] The HTTP 200 failure set: empty response with <code>end_turn</code>, <code>refusal</code>, <code>max_tokens</code> and <code>model_context_window_exceeded</code></span><span class="note">Part 1 reason 1 · why success is not a status code</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">[P] Metric names and buckets: <code>gen_ai.invoke_agent.inference_calls</code> and <code>.tool_calls</code> to 128, <code>invoke_workflow.duration</code> to 7200s</span><span class="note">Demo 2 · loop detection without opening a trace</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">[P] <code>gen_ai.evaluation.result</code> and <code>gen_ai.evaluation.score.value</code> as the eval signal in the telemetry spec</span><span class="note">Demo 2 · and it is a ticket, not a page</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">[P] The tokenizer change: about 30% more tokens for the same text at a stable price</span><span class="note">Part 1 reason 4 · a token threshold that breaks with no bug</span></div>
+      <div class="covered-row"><span class="status pill light">◐</span><span class="name">[P] Alarm fatigue evidence: ECRI's top hazard list and the 88.8% false-positive ICU study</span><span class="note">Named here as the reason for a written policy · the full case is leader session a5</span></div>
+      <div class="covered-row"><span class="status pill light">◐</span><span class="name">[P] Anthropic caching multipliers and the cache-invalidation hierarchy</span><span class="note">Used only to justify segmentation · the cost work is b4 and a4</span></div>
+      <div class="covered-row"><span class="status pill light">◐</span><span class="name">Provider-side drift as an alerting hazard</span><span class="note">Named in Part 1 reason 4 · the four drift types are b9</span></div>
+      <div class="covered-row"><span class="status pill bare">·</span><span class="name">Derived, not published: the 40,000-queries-a-month Beacon budget arithmetic and the burn figures in the Part 3 diagram</span><span class="note">Labelled as a worked derivation on a constructed case, not a vendor statistic</span></div>
+    </div>
+  </section>
+
+  <!-- ============ QUIZ ============ -->
+  <section class="section" id="quiz">
+    <div class="section-kicker">
+      <span class="klabel">Check yourself</span>
+      <h2>Three questions before you go 🎯 <span class="tag exercise">◐ 90 seconds</span></h2>
+    </div>
+    <div class="quiz-q" data-answer="1">
+      <p class="qtext">1 · Your monitoring never fires, yet a review shows a series of 100% error spikes lasting 5 minutes every 10 minutes ate 35% of the month's error budget. What is broken?</p>
+      <button class="qopt" type="button">A · The error rate metric is miscalculated and needs a different aggregation function</button>
+      <button class="qopt" type="button">B · The window, not the threshold. No averaging window you can tune sees a sustained breach in that pattern, which is why the fix is a burn-rate pair rather than a better number</button>
+      <button class="qopt" type="button">C · Nothing. If the alert did not fire, the outage was within tolerance by definition</button>
+      <p class="qwhy">This is Google SRE's recall failure, in the source's own example. A single-window threshold is asking "is it bad right now, for long enough", and a pattern that is bad half the time never satisfies "for long enough". Burn rate asks a different question: how fast is budget leaving. At 100% errors for half of every ten minutes, budget leaves fast enough that both a 1-hour and a 5-minute window cross 14.4x, and the page fires.</p>
+    </div>
+    <div class="quiz-q" data-answer="2">
+      <p class="qtext">2 · Your automated judge scores 5% of production traces and its mean score drops from 0.81 to 0.74 overnight. What severity does this get?</p>
+      <button class="qopt" type="button">A · Page. Output quality is the most important thing the system does, so it earns the highest severity available</button>
+      <button class="qopt" type="button">B · Neither. Judge scores are too unreliable to act on at all</button>
+      <button class="qopt" type="button">C · Ticket. The sample is small and noisy, and the judge itself drifts, so this needs a human looking at traces during working hours rather than a pager at 03:00</button>
+      <p class="qwhy">Eval-score drift on sampled traffic is real signal and it is the wrong shape for a page. The sample is small, quality is noisy at the unit level, and an uncalibrated judge can move for reasons that have nothing to do with your system, which means you would sometimes be paging on the judge's drift. Ticket it, investigate with traces, and keep the pager for assertion-verified task success, refusal rate and hard spend caps.</p>
+    </div>
+    <div class="quiz-q" data-answer="0">
+      <p class="qtext">3 · Which pair of signals belongs on an absolute static threshold rather than a burn-rate rule, and why?</p>
+      <button class="qopt" type="button">A · Max steps per task and max spend per hour, because they are hard safety rails with no budget to burn: they abort the run rather than notify a human to think about it</button>
+      <button class="qopt" type="button">B · p95 total latency and p95 TTFT, because latency percentiles are inherently absolute</button>
+      <button class="qopt" type="button">C · Task success rate and refusal rate, because both are user-visible</button>
+      <p class="qwhy">Burn rate exists to spend a budget deliberately: some failure is acceptable, and the question is only how fast. A safety rail has no budget. There is no acceptable rate of thirty-step runaway loops or of a five-figure hour, so the correct response is a circuit breaker at a fixed number, with the notification as a side effect. Keep three of these at most: max steps, max tokens per task, max spend per hour. Everything else gets a windowed rate.</p>
+    </div>
+    <p class="quiz-score"></p>
+  </section>
+
+  <!-- ============ CHEAT SHEET ============ -->
+  <section class="cheat" id="cheatsheet">
+    <h3>Builder session 8 cheat sheet <span>· pin this</span></h3>
+    <div class="grid-2">
+      <div class="cheat-item"><b>Burn rate</b><span>Observed error rate divided by the budget rate. 1 exhausts the month exactly. 14.4 exhausts it in about two days.</span></div>
+      <div class="cheat-item"><b>The table, 99.9% SLO</b><span>Page 1h/5m at 14.4 (2% spent). Page 6h/30m at 6 (5%). Ticket 3d/6h at 1 (10%).</span></div>
+      <div class="cheat-item"><b>Both windows, always</b><span>The long window earns the page. The short window clears it in five minutes instead of an hour. That is the reset-time fix.</span></div>
+      <div class="cheat-item"><b>Success is not a status code</b><span>A green 200 can be empty, a refusal, a truncation or a fabrication. Alert on an assertion over the output.</span></div>
+      <div class="cheat-item"><b>Quality is a rate, never a request</b><span>1000 identical prompts gave 80 distinct outputs. No per-request quality threshold can be stable.</span></div>
+      <div class="cheat-item"><b>Segment before you threshold</b><span>Cache hit vs miss and 1-step vs 12-step are different distributions in one endpoint. One p95 describes neither.</span></div>
+      <div class="cheat-item"><b>Two rows people always miss</b><span>Refusal rate (HTTP 200, invisible otherwise) and <code>gen_ai.response.model</code> against the requested model.</span></div>
+      <div class="cheat-item"><b>Static caps, exactly three</b><span>Max steps, max tokens per task, max spend per hour. Circuit breakers, not alerts. Everything else is a windowed rate.</span></div>
+    </div>
+  </section>
+
+  <footer class="pagefoot">
+    <span>Builder session 8 of 10 · learn-ai-observability-with-phoebe · by Phoebe Fu &nbsp;·&nbsp; 📚 <a href="https://phoebefu6.github.io/learn-with-phoebe/">Learn with Phoebe ↗</a></span>
+    <span><a href="../index.html">← Course home</a> &nbsp;·&nbsp; <a href="b9-drift-and-silent-changes.html">Next: drift and silent changes →</a></span>
+  </footer>
+
+</main>
+
+<script src="../assets/app.js?v=2"></script>
+</body>
+</html>

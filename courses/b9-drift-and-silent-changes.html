@@ -1,0 +1,486 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Builder session 9 · Drift and silent changes - learn ai observability with phoebe</title>
+<link rel="stylesheet" href="../assets/style.css?v=2">
+</head>
+<body>
+
+<div class="toolbar">
+  <div class="wrap">
+    <span class="crumb"><a href="../index.html">learn-ai-observability-with-phoebe</a> / Builder session 9 of 10</span>
+    <button class="btn" id="toggle-all" type="button">Expand all</button>
+    <button class="btn primary" id="zoom-toggle" type="button">Projector zoom: off</button>
+  </div>
+</div>
+
+<header class="masthead">
+  <div class="wrap">
+    <div class="eyebrow">Learn AI Observability with Phoebe · Builder track · Session 9 of 10</div>
+    <h1>Drift and silent changes: <span class="accent">the ground truth moved and nobody deployed</span></h1>
+    <p class="sub">Every incident so far in this course had a cause inside your repository. This session is about the class of degradation with no deploy behind it: the traffic changed, the answers got worse, the provider swapped a model under a floating alias, or an embedding model changed and turned your retrieval into noise while every span stayed green. Four different drifts, four different signals, four different fixes, and one uncomfortable lesson about what "our evals are green" is worth.</p>
+    <div class="chip-row">
+      <span class="chip level">🟠 Builder track</span>
+      <span class="chip audience">AI engineers · platform engineers · technical PMs</span>
+      <span class="chip time">45 min</span>
+    </div>
+    <div class="agenda">
+      <span class="a1" style="flex:1">0-3 · Welcome</span>
+      <span class="a2" style="flex:4">3-20 · Four drifts, and the provider clock</span>
+      <span class="a3" style="flex:5">20-40 · Build-along: the sampled scorer, then the version gate</span>
+      <span class="a4" style="flex:1">40-45 · Q&amp;A</span>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <!-- ============ INTRO ============ -->
+  <section class="section" id="intro">
+    <div class="section-kicker">
+      <span class="klabel">Part 0</span>
+      <h2>The only failure class with no commit to blame</h2>
+    </div>
+    <p class="lede">Debugging assumes a change. You look at what shipped, you bisect, you revert. Drift breaks that reflex, because the system that got worse is byte-for-byte the system that was working, and the thing that moved is either outside your repository or outside your company. That is why drift is where teams lose the most time: they spend the first day looking for a deploy that does not exist.</p>
+    <div class="legend">
+      <span class="pill solid">Live - presented in session</span>
+      <span class="pill light">Self-study - read after class</span>
+      <span class="pill inkpill">Official sources covered</span>
+    </div>
+    <div class="callout win">
+      <strong>★ What you walk out with today</strong>
+      Four drift types with distinct signals and distinct fixes, the three concrete mechanisms by which a provider changes your system without your involvement, the difference between index staleness and embedding-space incompatibility (and why only one of them has a partial fix), a sampled online scorer wired to <code>gen_ai.evaluation.result</code>, and an embedding-version gate that refuses a query rather than answering it badly.
+    </div>
+    <div class="callout tip">
+      <strong>One sentence for this session</strong>
+      Evals tell you whether it works. Observability tells you what actually happened. Drift is the case where both were true last month and only one of them is true today, so the useful artifact is not a score, it is a time series of a score, plotted next to a time series of your inputs.
+    </div>
+  </section>
+
+  <!-- ============ PART 1 ============ -->
+  <section class="section" id="four-drifts">
+    <div class="section-kicker">
+      <span class="klabel">Part 1 · the taxonomy</span>
+      <h2>Four drifts, four signals, four fixes <span class="tag concept">7 min live</span></h2>
+    </div>
+    <p class="lede">"Drift" gets used as one word for four unrelated problems, which is why drift conversations go nowhere. Separate them by the signal that reveals each one, because that is what decides what you have to build, and notice that only one of the four has a change you could point at in a changelog.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 454" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Four drift types with their signals and fixes: input distribution drift, output quality drift, silent provider-side change, and embedding drift for retrieval.">
+        <style>
+          .b9aH { font: 700 13px Inter, sans-serif; fill: #1B2230; }
+          .b9aL { font: 600 11px Inter, sans-serif; fill: #66707E; }
+          .b9aT { font: 700 12.5px Inter, sans-serif; fill: #FFFFFF; }
+          .b9aS { font: 400 11px Inter, sans-serif; fill: #AFC0E4; }
+          .b9aC { font: 400 11px Inter, sans-serif; fill: #E4F6F9; }
+          .b9aX { font: 400 11px Inter, sans-serif; fill: #66707E; }
+          .b9aM { font: 400 10.5px ui-monospace, Menlo, monospace; fill: #16305C; }
+          .b9aF { font: 400 11px Inter, sans-serif; fill: #08323A; }
+          .b9aK { font: 600 12.5px Inter, sans-serif; fill: #08323A; }
+        </style>
+
+        <text class="b9aH" x="24" y="26">Four drifts, four different signals, four different fixes</text>
+        <text class="b9aL" x="24" y="44">what moved</text>
+        <text class="b9aL" x="220" y="44">where it shows up first</text>
+        <text class="b9aL" x="620" y="44">what you actually do</text>
+
+        <rect x="24" y="52" width="186" height="76" rx="9" fill="#0C1F3F"/>
+        <text class="b9aT" x="40" y="80">Input distribution</text>
+        <text class="b9aS" x="40" y="98">the traffic changed</text>
+        <text class="b9aS" x="40" y="116">nothing else did</text>
+        <rect x="220" y="52" width="390" height="76" rx="9" fill="#EDF2FB" stroke="#AFC0E4" stroke-width="1.5"/>
+        <text class="b9aX" x="236" y="74">Embedding-centroid shift vs a rolling baseline.</text>
+        <text class="b9aX" x="236" y="92">New-intent cluster share. Tokens per request</text>
+        <text class="b9aX" x="236" y="110">moving with no code change. Retrieval null-rate.</text>
+        <rect x="620" y="52" width="236" height="76" rx="9" fill="#FFFFFF" stroke="#C7CFDA" stroke-width="1.5"/>
+        <text class="b9aF" x="636" y="74">Cluster the nulls by query.</text>
+        <text class="b9aF" x="636" y="92">That list is your content</text>
+        <text class="b9aF" x="636" y="110">backlog, ranked for you.</text>
+
+        <rect x="24" y="136" width="186" height="76" rx="9" fill="#16305C"/>
+        <text class="b9aT" x="40" y="164">Output quality</text>
+        <text class="b9aS" x="40" y="182">the answers changed</text>
+        <text class="b9aS" x="40" y="200">the inputs did not</text>
+        <rect x="220" y="136" width="390" height="76" rx="9" fill="#EDF2FB" stroke="#AFC0E4" stroke-width="1.5"/>
+        <text class="b9aX" x="236" y="158">Scorer on sampled traces. Refusal rate.</text>
+        <text class="b9aX" x="236" y="176">Truncation rate. And downstream behaviour:</text>
+        <text class="b9aX" x="236" y="194">retries, escalation to human, abandonment.</text>
+        <rect x="620" y="136" width="236" height="76" rx="9" fill="#FFFFFF" stroke="#C7CFDA" stroke-width="1.5"/>
+        <text class="b9aF" x="636" y="158">Watch the downstream</text>
+        <text class="b9aF" x="636" y="176">signal first. It is honest</text>
+        <text class="b9aF" x="636" y="194">and it needs no scorer.</text>
+
+        <rect x="24" y="220" width="186" height="76" rx="9" fill="#3F62A8"/>
+        <text class="b9aT" x="40" y="248">Provider-side change</text>
+        <text class="b9aC" x="40" y="266">somebody deployed</text>
+        <text class="b9aC" x="40" y="284">and it was not you</text>
+        <rect x="220" y="220" width="390" height="76" rx="9" fill="#EDF2FB" stroke="#AFC0E4" stroke-width="1.5"/>
+        <text class="b9aM" x="236" y="242">gen_ai.response.model not equal to the</text>
+        <text class="b9aX" x="236" y="260">requested model. A step change in tokens per</text>
+        <text class="b9aX" x="236" y="278">request at an unchanged posted price.</text>
+        <rect x="620" y="220" width="236" height="76" rx="9" fill="#FFFFFF" stroke="#C7CFDA" stroke-width="1.5"/>
+        <text class="b9aF" x="636" y="242">Pin snapshots. Log both</text>
+        <text class="b9aF" x="636" y="260">model fields. Diary the</text>
+        <text class="b9aF" x="636" y="278">deprecation calendar.</text>
+
+        <rect x="24" y="304" width="186" height="76" rx="9" fill="#0891A6"/>
+        <text class="b9aT" x="40" y="332">Embedding drift</text>
+        <text class="b9aC" x="40" y="350">retrieval only, and</text>
+        <text class="b9aC" x="40" y="368">it is two problems</text>
+        <rect x="220" y="304" width="390" height="76" rx="9" fill="#E4F6F9" stroke="#0891A6" stroke-width="1.5"/>
+        <text class="b9aX" x="236" y="326">Index freshness as an SLI catches staleness.</text>
+        <text class="b9aX" x="236" y="344">Version mismatch between the query embedding</text>
+        <text class="b9aX" x="236" y="362">and the index embedding has no signal at all.</text>
+        <rect x="620" y="304" width="236" height="76" rx="9" fill="#FFFFFF" stroke="#C7CFDA" stroke-width="1.5"/>
+        <text class="b9aF" x="636" y="326">Version the model in</text>
+        <text class="b9aF" x="636" y="344">index metadata. Refuse</text>
+        <text class="b9aF" x="636" y="362">mismatched queries.</text>
+
+        <rect x="24" y="394" width="832" height="44" rx="10" fill="#FFFFFF" stroke="#C7CFDA" stroke-width="1.5"/>
+        <rect x="42" y="408" width="14" height="14" rx="3" fill="#0891A6"/>
+        <text class="b9aK" x="66" y="420">Only the third one has a deploy you can point at, and it is not in your repository.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - four unrelated problems that share one word</figcaption>
+    </figure>
+
+    <details class="card" open>
+      <summary><span class="mode live">Live</span>The case study: a vendor could not reproduce its own degradation<span class="mini">5 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>The best available teaching artifact for output-quality drift is a primary-source postmortem in which a model provider documents how hard its own degradation was to detect. Three overlapping issues, reported by users, and the internal benchmarks stayed green.</p>
+        <ul>
+          <li>Scale, from the postmortem itself: at peak, <strong>16% of Sonnet 4 requests</strong> were affected in the worst hour, and <strong>approximately 30% of Claude Code users who made requests during that period had at least one message routed to the wrong server type</strong>.</li>
+          <li>Platform asymmetry: peak impact on Bedrock was 0.18% and on Vertex under 0.0004%. <strong>If you multi-home, one platform's telemetry does not represent the others</strong>, and the platform you happen to dashboard is the one whose numbers you will believe.</li>
+          <li>Why detection failed: the benchmarks "simply didn't capture the degradation users were reporting", partly <strong>because the model recovers from isolated errors</strong>, and because the bugs produced different symptoms on different platforms at different rates.</li>
+        </ul>
+        <p>Take exactly two lessons. First: <strong>user reports are a signal.</strong> They are noisy, unstructured and frequently right. Second, and this is the hard one: <strong>"our evals are green" is not a rebuttal to a user report.</strong> It is a statement about a distribution you constructed, and drift is precisely the case where your constructed distribution has stopped resembling production traffic. When those two disagree, the honest next step is to sample real traces from the complaining segment, not to re-run the suite.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode self">Self-study</span>Downstream behaviour: the signal that needs no scorer<span class="mini">3 min read</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>Quality scorers are expensive to build, need calibration, and drift themselves. Meanwhile your users are already scoring every answer, in a currency you can measure without any judge at all:</p>
+        <ul>
+          <li><strong>Retry rate.</strong> The same conversation id asking a near-identical question within a minute. One person deciding the answer was useless, recorded as a fact rather than an opinion.</li>
+          <li><strong>Escalation to human.</strong> The strongest signal available in any product with a support path, and usually already instrumented for a different reason.</li>
+          <li><strong>Abandonment.</strong> A session that ends immediately after an answer, with no follow-up and no action taken on the result.</li>
+        </ul>
+        <p>These are lagging by minutes rather than by a quarter, they cost nothing to compute, and they are honest in the way judge scores are not, because nobody had to define what "good" means. Their weakness is diagnosis: they tell you something got worse and nothing about what. So the sequence that works is: downstream behaviour alerts you, sampled traces explain it, and a scorer gives you the trend line afterwards. Teams that build in the opposite order spend a quarter on a judge before they have anything watching production.</p>
+      </div>
+    </details>
+  </section>
+
+  <!-- ============ PART 2 ============ -->
+  <section class="section" id="provider">
+    <div class="section-kicker">
+      <span class="klabel">Part 2 · the provider</span>
+      <h2>Three ways a provider changes your system without you <span class="tag concept">7 min live</span></h2>
+    </div>
+    <p class="lede">This is the drift type with the clearest mechanism and the widest blind spot, because most teams assume that not deploying means not changing. Three concrete mechanisms, all documented by the provider, all capable of moving your behaviour or your bill overnight.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 426" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Three provider-side change mechanisms: floating aliases versus pinned snapshots, the forced migration lifecycle from active to retired, and parameter or tokenizer semantics changing under a stable price.">
+        <style>
+          .b9bH { font: 700 12.5px Inter, sans-serif; fill: #1B2230; }
+          .b9bM { font: 400 10.5px ui-monospace, Menlo, monospace; fill: #FFFFFF; }
+          .b9bT { font: 700 12px Inter, sans-serif; fill: #FFFFFF; }
+          .b9bX { font: 400 11px Inter, sans-serif; fill: #66707E; }
+          .b9bR { font: 400 11px Inter, sans-serif; fill: #991B1B; }
+          .b9bK { font: 600 12.5px Inter, sans-serif; fill: #08323A; }
+        </style>
+
+        <text class="b9bH" x="24" y="38">1 · A floating alias is a promise about a name, not about a model</text>
+        <rect x="24" y="50" width="250" height="32" rx="7" fill="#16305C"/>
+        <text class="b9bM" x="40" y="70">claude-opus-5</text>
+        <path d="M282 66 l12 0 m-4 -4 l4 4 l-4 4" stroke="#66707E" stroke-width="1.5" fill="none"/>
+        <text class="b9bX" x="304" y="70">floating alias: resolves to whatever that is today</text>
+        <rect x="24" y="90" width="250" height="32" rx="7" fill="#0891A6"/>
+        <text class="b9bM" x="40" y="110">claude-sonnet-4-5-20250929</text>
+        <path d="M282 106 l12 0 m-4 -4 l4 4 l-4 4" stroke="#66707E" stroke-width="1.5" fill="none"/>
+        <text class="b9bX" x="304" y="110">pinned snapshot: what you tested stays what you run</text>
+
+        <text class="b9bH" x="24" y="158">2 · Forced migration runs on a clock, whether or not you are ready</text>
+        <rect x="24" y="170" width="180" height="34" rx="7" fill="#0891A6"/>
+        <text class="b9bT" x="40" y="192">Active</text>
+        <path d="M210 187 l12 0 m-4 -4 l4 4 l-4 4" stroke="#66707E" stroke-width="1.5" fill="none"/>
+        <rect x="228" y="170" width="180" height="34" rx="7" fill="#3F62A8"/>
+        <text class="b9bT" x="244" y="192">Legacy</text>
+        <path d="M414 187 l12 0 m-4 -4 l4 4 l-4 4" stroke="#66707E" stroke-width="1.5" fill="none"/>
+        <rect x="432" y="170" width="180" height="34" rx="7" fill="#16305C"/>
+        <text class="b9bT" x="448" y="192">Deprecated</text>
+        <path d="M618 187 l12 0 m-4 -4 l4 4 l-4 4" stroke="#66707E" stroke-width="1.5" fill="none"/>
+        <rect x="636" y="170" width="180" height="34" rx="7" fill="#991B1B"/>
+        <text class="b9bT" x="652" y="192">Retired</text>
+        <text class="b9bX" x="24" y="226">The provider commits to at least 60 days' notice before a retirement date.</text>
+        <text class="b9bR" x="24" y="244">Requests to models past the retirement date will fail. That is an outage on a calendar.</text>
+
+        <text class="b9bH" x="24" y="282">3 · Semantics change under a price that does not</text>
+        <rect x="24" y="294" width="404" height="64" rx="9" fill="#EDF2FB" stroke="#AFC0E4" stroke-width="1.5"/>
+        <text class="b9bX" x="42" y="320">temperature, top_p and top_k are deprecated on</text>
+        <text class="b9bX" x="42" y="338">Opus 4.7 and later, and return 400 if non-default.</text>
+        <rect x="452" y="294" width="404" height="64" rx="9" fill="#E4F6F9" stroke="#0891A6" stroke-width="1.5"/>
+        <text class="b9bX" x="470" y="320">The newer tokenizer makes about 30% more tokens</text>
+        <text class="b9bX" x="470" y="338">for the same text. Same price, bigger bill.</text>
+
+        <rect x="24" y="372" width="832" height="42" rx="10" fill="#FFFFFF" stroke="#C7CFDA" stroke-width="1.5"/>
+        <rect x="42" y="385" width="14" height="14" rx="3" fill="#0891A6"/>
+        <text class="b9bK" x="66" y="397">Always log gen_ai.response.model next to gen_ai.request.model. One field, whole class caught.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - alias, calendar, and semantics: three changes with no commit of yours</figcaption>
+    </figure>
+
+    <div class="callout warn">
+      <strong>The cheapest insurance in this course</strong>
+      <code>gen_ai.request.model</code> is what you asked for. <code>gen_ai.response.model</code> is what answered. Both are Recommended attributes on the inference span, and the pair costs you one string per call. A non-zero mismatch rate is proof that a floating alias moved, that a gateway rewrote your request, or that a fallback path you forgot about is serving live traffic. Almost nobody emits both, and it is the single highest-value line of instrumentation on this page.
+    </div>
+
+    <details class="card">
+      <summary><span class="mode self">Self-study</span>What a pinned snapshot does not protect you from<span class="mini">3 min read</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>Pinning is necessary and it is not sufficient, and it is worth being precise about the residue so you do not oversell it internally:</p>
+        <ul>
+          <li><strong>The clock still runs.</strong> A pinned snapshot has a lifecycle: Active, then Legacy, then Deprecated, then Retired. The commitment is at least 60 days' notice, and requests to a model past its retirement date fail. Pinning converts a silent quality change into a dated hard failure, which is a large improvement and not an exemption.</li>
+          <li><strong>Serving-side variation persists.</strong> Identical kernels are run-to-run deterministic but not batch-invariant, and server batch size varies with other users' load. The other concurrent users are not an input to your system but they are a nondeterministic property of it, which is why 1000 identical prompts at temperature 0 produced 80 distinct completions.</li>
+          <li><strong>Your reproducibility levers may be gone.</strong> On Opus 4.7 and later, <code>temperature</code>, <code>top_p</code> and <code>top_k</code> are deprecated and return 400 on non-default values, so "just set temperature to 0 and replay it" is not available as a strategy.</li>
+        </ul>
+        <p>Which is the whole argument of this course restated: because you cannot reproduce a production trace by replaying it, you must <strong>capture</strong> enough of it at the time it happens.</p>
+      </div>
+    </details>
+  </section>
+
+  <!-- ============ PART 3 ============ -->
+  <section class="section" id="embedding">
+    <div class="section-kicker">
+      <span class="klabel">Part 3 · retrieval</span>
+      <h2>Embedding drift is two problems, and only one has a partial fix <span class="tag concept">6 min live</span></h2>
+    </div>
+    <p class="lede">People say "our embeddings drifted" to mean two things that share nothing except the word. One is a freshness problem with an obvious SLI. The other is a compatibility problem with no signal whatsoever, and it is the purest coverage failure in this course: retrieval degrades towards random while every single span reports OK.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 336" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Index staleness versus embedding-space incompatibility, and the operational rule of versioning the embedding model in index metadata and refusing mismatched queries.">
+        <style>
+          .b9cT { font: 700 12.5px Inter, sans-serif; fill: #16305C; }
+          .b9cC { font: 700 12.5px Inter, sans-serif; fill: #08323A; }
+          .b9cX { font: 400 11px Inter, sans-serif; fill: #66707E; }
+          .b9cL { font: 600 10.5px Inter, sans-serif; fill: #1B2230; }
+          .b9cR { font: 400 11px Inter, sans-serif; fill: #991B1B; }
+          .b9cB { font: 600 12.5px Inter, sans-serif; fill: #FFFFFF; }
+        </style>
+
+        <text class="b9cL" x="24" y="30">TWO PROBLEMS, ONE WORD</text>
+
+        <rect x="24" y="42" width="404" height="182" rx="10" fill="#EDF2FB" stroke="#AFC0E4" stroke-width="1.5"/>
+        <text class="b9cT" x="42" y="70">Index staleness</text>
+        <text class="b9cX" x="42" y="96">The document changed. Its embedding did not.</text>
+        <text class="b9cX" x="42" y="114">Retrieval keeps returning last quarter's</text>
+        <text class="b9cX" x="42" y="132">paragraph, confidently, with a high score.</text>
+        <text class="b9cL" x="42" y="160">SIGNAL</text>
+        <text class="b9cX" x="42" y="178">Index freshness as an SLI: age of the oldest</text>
+        <text class="b9cX" x="42" y="196">embedding against the document mtime.</text>
+        <text class="b9cX" x="42" y="214">Fix: re-embed on write. Partial is fine here.</text>
+
+        <rect x="452" y="42" width="404" height="182" rx="10" fill="#FEF2F2" stroke="#FCA5A5" stroke-width="1.5"/>
+        <text class="b9cC" x="470" y="70" fill="#991B1B">Embedding-space incompatibility</text>
+        <text class="b9cX" x="470" y="96">You changed the embedding model. Vectors from</text>
+        <text class="b9cX" x="470" y="114">two different models are not comparable, so the</text>
+        <text class="b9cX" x="470" y="132">similarity scores are close to meaningless.</text>
+        <text class="b9cL" x="470" y="160">SIGNAL</text>
+        <text class="b9cR" x="470" y="178">None. Nothing errors. Retrieval returns k</text>
+        <text class="b9cR" x="470" y="196">documents with plausible scores, as always.</text>
+        <text class="b9cX" x="470" y="214">Fix: full corpus re-embedding. No partial exists.</text>
+
+        <rect x="24" y="240" width="832" height="80" rx="10" fill="#0C1F3F"/>
+        <text class="b9cB" x="44" y="268">The operational rule: version the embedding model in the index metadata, and refuse</text>
+        <text class="b9cB" x="44" y="288">any query whose query-embedding version does not match the index. Refusing is the</text>
+        <text class="b9cB" x="44" y="308">feature: a mismatch that answers anyway is a green trace wrapped around noise.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - staleness has an SLI, incompatibility has no signal at all</figcaption>
+    </figure>
+
+    <div class="callout warn">
+      <strong>Honest gap, stated plainly</strong>
+      No primary vendor sentence says "you must re-embed your whole corpus when you change embedding model". That claim is mathematical necessity plus universal practice, not a quotable line from a specification, and you should present it that way in your own design reviews. What follows from the mathematics is not in dispute: a cosine similarity between vectors produced by two different models is not a measure of anything, so a mixed index is not a degraded index, it is a broken one that keeps working.
+    </div>
+
+    <details class="card">
+      <summary><span class="mode self">Self-study</span>Evals entering the telemetry spec: <code>gen_ai.evaluation.result</code><span class="mini">3 min read</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>Until recently, eval scores lived in one system and traces lived in another, and joining them was somebody's weekend project. That is changing: the GenAI semantic conventions now define an evaluation signal, which means a score can ride the same pipeline as the span it describes.</p>
+        <ul>
+          <li>The event is <code>gen_ai.evaluation.result</code>, carrying <code>gen_ai.evaluation.name</code>, <code>gen_ai.evaluation.score.value</code>, <code>gen_ai.evaluation.score.label</code> and <code>gen_ai.evaluation.explanation</code>.</li>
+          <li>The practical consequence is the one that matters for this session: a drifting score is now a time series sitting next to the trace that produced it, so "quality dropped" and "here are forty traces from the drop" become the same query instead of two systems and a spreadsheet.</li>
+          <li>The usual caveat applies with full force. Like everything else in these conventions it is <code>Development</code> status with no tagged release, so check the current spelling in the repository before you build a dashboard on it.</li>
+        </ul>
+        <p>OpenInference reaches the same place from the other direction, with <strong>EVALUATOR</strong> as one of its ten span kinds. Different dialect, same convergence: the evaluator is becoming part of the trace rather than a separate report.</p>
+      </div>
+    </details>
+  </section>
+
+  <!-- ============ DEMO 1 ============ -->
+  <section class="section" id="demo-1">
+    <div class="section-kicker">
+      <span class="klabel">Demo 1 of 2</span>
+      <h2>Wire a sampled online scorer on Beacon traffic <span class="tag demo">★ 11 min · everyone builds</span></h2>
+    </div>
+    <p class="lede">Beacon's Insight Bot now has coverage, cost attribution and alerts. What it does not have is any way to notice that answers got worse this month. Build the smallest thing that would: an asynchronous scorer on a sample of production traces, emitting a score back onto the trace.</p>
+
+    <div class="steps">
+      <div class="step"><p>Pick the sample rate and write down why. <strong>Prevailing vendor guidance is 1-10% of production traces, commonly 5-10%, scored asynchronously and filtered towards high-value traces.</strong> Label that in your design doc as <strong>[S] prevailing vendor guidance, not an empirical finding</strong>: there is no peer-reviewed or survey source establishing what teams actually use or what is sufficient. You are choosing a starting point, not applying a standard.</p></div>
+      <div class="step"><p>Make the sample representative or admit that it is not. A sample skewed towards cheap fast traces will miss exactly the twelve-step runs where quality dies. Stratify by the segments you already alert on in b8: model, cache-hit state, step bucket, and tenant tier. An unstratified 5% of Beacon traffic is roughly 5% of the easy questions.</p></div>
+      <div class="step"><p>Score off the request path, always. Read sampled traces from storage, score them, and emit <code>gen_ai.evaluation.result</code> with <code>gen_ai.evaluation.name</code> and <code>gen_ai.evaluation.score.value</code>. A judge in the hot path adds latency and a second failure mode to the thing you were trying to measure.</p></div>
+      <div class="step"><p>Calibrate the judge against humans before you alert on it. Have two people label 100 sampled traces, compare with the judge, and record the agreement. Skip this and you are not monitoring your system, you are monitoring the judge, and when the judge drifts you will go looking for a deploy in the wrong repository.</p></div>
+      <div class="step"><p>Now plot the score next to three things that need no judge at all: retry rate, escalation-to-human rate and tokens per request. When the honest signals and the scorer disagree, believe the honest signals and go read traces.</p></div>
+    </div>
+
+    <div class="prompt-box good">
+<span class="label">★ Sampled scorer, off the request path</span>
+# 1-10% of traces (commonly 5-10%) - [S] prevailing vendor guidance, not evidence
+for trace in sample_traces(rate=0.05, stratify_by=["model", "cache_state", "step_bucket"]):
+    verdict = judge(trace.question, trace.answer, trace.retrieved_doc_ids)
+
+    with tracer.start_as_current_span("evaluate", links=[link_to(trace)]) as span:
+        span.add_event("gen_ai.evaluation.result", {
+            "gen_ai.evaluation.name":        "answer_grounded_in_retrieval",
+            "gen_ai.evaluation.score.value": verdict.score,     # 0.0 - 1.0
+            "gen_ai.evaluation.score.label": verdict.label,     # pass / fail
+            "gen_ai.evaluation.explanation": verdict.reason,
+        })
+# ticket on drift, never a page: the sample is small and the judge drifts too
+    </div>
+
+    <div class="callout tip">
+      <strong>Two caveats to put in the design doc, not in the retro</strong>
+      A sample only works if it is representative, and a judge score only means something after human calibration. Both failures produce the same symptom: a confident quality time series that has stopped describing your users. Write both caveats next to the number in the doc, so the next person to read the dashboard knows what it is and is not.
+    </div>
+  </section>
+
+  <!-- ============ DEMO 2 ============ -->
+  <section class="section" id="demo-2">
+    <div class="section-kicker">
+      <span class="klabel">Demo 2 of 2</span>
+      <h2>Two guards: the model pin, and the embedding version gate <span class="tag demo">★ 11 min · everyone builds</span></h2>
+    </div>
+    <p class="lede">Beacon's retrieval index was built eighteen months ago and nobody remembers which embedding model produced it. That sentence is a production incident waiting for a migration ticket. Build the two guards that turn both silent-change classes into loud, dated failures.</p>
+
+    <div class="steps">
+      <div class="step"><p>Replace every floating alias in configuration with a pinned snapshot, and put the pin in the same file as the eval results that justified it. A pin without a recorded reason gets removed by the next person who wants a newer model.</p></div>
+      <div class="step"><p>Emit both model fields on every inference span and add the b8 rule: alert when <code>gen_ai.response.model</code> differs from <code>gen_ai.request.model</code> on more than zero requests. Then check the deprecation calendar for every pinned snapshot you own and put the retirement dates in a shared calendar, because at least 60 days' notice is only useful to someone who is reading.</p></div>
+      <div class="step"><p>Write the embedding model id and version into the index metadata, not into a README. Index metadata travels with the index through backups, restores and migrations. A README does not.</p></div>
+      <div class="step"><p>At query time, compare the query-embedding version with the index version and <strong>refuse on mismatch</strong>. Return an error and set span status, do not degrade quietly. This is the one place in the whole course where refusing to answer is unambiguously the right behaviour, because an answer built on a mismatched index is a confident answer built on noise.</p></div>
+      <div class="step"><p>Add index freshness as an SLI: the age of the oldest embedding relative to its document's modified time. Staleness is the drift that has a partial fix, so give it the metric that lets you fix it incrementally.</p></div>
+    </div>
+
+    <div class="prompt-box good">
+<span class="label">★ The gate that refuses rather than degrades</span>
+INDEX_EMBED = index.metadata["embedding_model"]   # e.g. "&lt;model-id&gt;@2025-01"
+
+def retrieve(question: str, k: int = 8):
+    qv, qv_model = embed(question)
+    if qv_model != INDEX_EMBED:
+        span = trace.get_current_span()
+        span.set_status(Status(StatusCode.ERROR))
+        span.set_attribute("retrieval.embedding_version_mismatch", True)
+        raise EmbeddingVersionMismatch(f"query={qv_model} index={INDEX_EMBED}")
+    return index.search(qv, k=k)      # doc ids AND scores go on the span
+    </div>
+
+    <div class="callout warn">
+      <strong>Why the loud failure is the cheap option</strong>
+      A mismatched index does not error, does not slow down and does not empty out. It returns k documents with plausible-looking scores, the model summarises them fluently, and every span in the trace is green. There is no percentile, no error rate and no eval score that reliably catches it, because the failure lives in a comparison that was never valid in the first place. Six lines of version check convert an unbounded, unobservable quality problem into a stack trace with a date on it.
+    </div>
+  </section>
+
+  <!-- ============ HOMEWORK ============ -->
+  <section class="section" id="exercise">
+    <div class="section-kicker">
+      <span class="klabel">Homework</span>
+      <h2>Try it yourself - this week <span class="tag exercise">◐ 50-60 min total</span></h2>
+    </div>
+    <ul>
+      <li>Grep your configuration for model identifiers and count how many are floating aliases. Then check whether you log <code>gen_ai.response.model</code> anywhere at all. Most teams discover they have been unable to answer "which model actually served last Tuesday" for their whole history.</li>
+      <li>Find out which embedding model built your production index, using only artifacts that exist today. If the answer involves asking a person, you have found the gap this session is about, and the fix is one metadata write.</li>
+      <li>Plot tokens per request for the last ninety days with no other filter. A step change with no deploy behind it is either a traffic shift or a provider-side change, and either way it is a conversation worth having with the number in hand.</li>
+      <li>Compute retry rate and escalation-to-human rate for one AI feature, weekly, for the last quarter. You almost certainly already have the data. This is the cheapest quality time series available to you and it needs no judge.</li>
+      <li>Take one user complaint your team previously closed as "could not reproduce, evals green" and pull the actual traces from that user's segment for that hour. Whatever you find, the exercise retrains the reflex, and that reflex is the real deliverable of this session.</li>
+    </ul>
+  </section>
+
+  <!-- ============ SOURCES ============ -->
+  <section class="section" id="official">
+    <div class="section-kicker">
+      <span class="klabel">Source material</span>
+      <h2>Official sources covered</h2>
+    </div>
+    <p class="lede">Primary sources are marked <strong>[P]</strong> and secondary <strong>[S]</strong>. Two claims on this page are deliberately not presented as sourced facts: the sampling cadence, and the re-embedding requirement. Both are flagged below and in the body.</p>
+    <div class="covered">
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">[P] Anthropic postmortem of three issues: 16% of Sonnet 4 requests at peak, about 30% of Claude Code users affected, Bedrock 0.18%, Vertex under 0.0004%</span><span class="note">Part 1 · benchmarks did not capture what users reported</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">[P] Floating aliases versus pinned snapshots, and the Active to Legacy to Deprecated to Retired lifecycle with at least 60 days' notice</span><span class="note">Part 2 · requests past the retirement date will fail</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">[P] <code>temperature</code>, <code>top_p</code> and <code>top_k</code> deprecated on Opus 4.7 and later, returning 400 on non-default values</span><span class="note">Part 2 · reproducibility is not available as a lever</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">[P] The tokenizer change: approximately 30% more tokens for the same text</span><span class="note">Part 2 · semantics moving under an unchanged price</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">[P] Non-determinism: 1000 completions at temperature 0 gave 80 unique outputs; kernels are deterministic but not batch-invariant</span><span class="note">Part 2 self-study · why capture beats replay</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">[P] <code>gen_ai.request.model</code> and <code>gen_ai.response.model</code> as Recommended attributes on the inference span</span><span class="note">Part 2 · the mismatch rule, and Demo 2</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">[P] <code>gen_ai.evaluation.result</code> with <code>.name</code>, <code>.score.value</code>, <code>.score.label</code> and <code>.explanation</code>; OpenInference's EVALUATOR span kind</span><span class="note">Part 3 · evals entering the telemetry spec. All <code>Development</code> status</span></div>
+      <div class="covered-row"><span class="status pill light">◐</span><span class="name">[S] Sampling cadence of 1-10% of traces, commonly 5-10%, scored asynchronously</span><span class="note">Demo 1 · <strong>prevailing vendor guidance, explicitly not an empirical finding.</strong> No peer-reviewed or survey source establishes what teams use or what suffices</span></div>
+      <div class="covered-row"><span class="status pill light">◐</span><span class="name">Full corpus re-embedding on an embedding-model change</span><span class="note">Part 3 · <strong>honest gap.</strong> No primary vendor sentence states it. Mathematical necessity plus universal practice</span></div>
+      <div class="covered-row"><span class="status pill light">◐</span><span class="name">Refusal rate, truncation signals and the burn-rate rules that carry these drifts</span><span class="note">Referenced from b6 and b8 rather than re-taught</span></div>
+      <div class="covered-row"><span class="status pill bare">·</span><span class="name">Beacon's eighteen-month-old index and its missing embedding metadata</span><span class="note">Constructed case, consistent with the course's running incident. Not a real system</span></div>
+    </div>
+  </section>
+
+  <!-- ============ QUIZ ============ -->
+  <section class="section" id="quiz">
+    <div class="section-kicker">
+      <span class="klabel">Check yourself</span>
+      <h2>Three questions before you go 🎯 <span class="tag exercise">◐ 90 seconds</span></h2>
+    </div>
+    <div class="quiz-q" data-answer="2">
+      <p class="qtext">1 · Users in one segment report that answers got worse this week. Your eval suite is green and nothing shipped. What is the correct next move?</p>
+      <button class="qopt" type="button">A · Reply with the eval results. A green suite is objective evidence and user perception is not</button>
+      <button class="qopt" type="button">B · Re-run the eval suite with more examples until it either reproduces the issue or clears it</button>
+      <button class="qopt" type="button">C · Sample real traces from that segment in that time window, because a green suite is a claim about a distribution you constructed and drift is exactly the case where it stopped resembling production</button>
+      <p class="qwhy">A model provider documented this failure about itself: benchmarks did not capture the degradation users were reporting, partly because the model recovers from isolated errors, and because symptoms differed by platform and rate. User reports are a signal. "Our evals are green" is not a rebuttal to one, it is a statement about a set of examples you chose before the drift happened. Go and read the traces from the complaining segment.</p>
+    </div>
+    <div class="quiz-q" data-answer="0">
+      <p class="qtext">2 · Someone swaps the embedding model for new document ingestion but does not re-embed the existing corpus. What does your telemetry show?</p>
+      <button class="qopt" type="button">A · Nothing wrong. Retrieval returns k documents with plausible scores, every span is green, and answer quality quietly collapses towards random</button>
+      <button class="qopt" type="button">B · A spike in retrieval latency as the index reconciles the two vector spaces</button>
+      <button class="qopt" type="button">C · Empty retrieval results, which your null-rate alert catches within the hour</button>
+      <p class="qwhy">This is the purest coverage failure in the course. Similarity between vectors from two different models is not a measure of anything, but the arithmetic still completes and still returns a ranked list, so there is no error, no latency change and no empty result to alert on. That is why the fix is structural rather than observational: version the embedding model in the index metadata and refuse any query whose embedding version does not match. Refusing loudly is the feature.</p>
+    </div>
+    <div class="quiz-q" data-answer="1">
+      <p class="qtext">3 · You are asked what sampling rate to score production traces at. What is the honest answer?</p>
+      <button class="qopt" type="button">A · 5%, which is the industry standard established by survey evidence</button>
+      <button class="qopt" type="button">B · Start in the 1-10% range, commonly 5-10%, and label it as prevailing vendor guidance rather than an empirical finding, because no peer-reviewed or survey source establishes what teams actually use or what is sufficient</button>
+      <button class="qopt" type="button">C · 100%, since anything less risks missing the failure you care about</button>
+      <p class="qwhy">The range is real and it is worth using as a starting point, but its provenance is vendor documentation, not evidence. Saying so costs you nothing and buys you the right to change the number when your own data justifies it. Two conditions matter far more than the percentage: the sample has to be representative, so stratify it by the segments you already alert on, and the judge has to be calibrated against humans before you put a threshold on its output, or you are monitoring the judge's drift rather than your system's.</p>
+    </div>
+    <p class="quiz-score"></p>
+  </section>
+
+  <!-- ============ CHEAT SHEET ============ -->
+  <section class="cheat" id="cheatsheet">
+    <h3>Builder session 9 cheat sheet <span>· pin this</span></h3>
+    <div class="grid-2">
+      <div class="cheat-item"><b>Four drifts, not one</b><span>Input distribution, output quality, provider-side change, embedding drift. Different signals, different fixes.</span></div>
+      <div class="cheat-item"><b>Retrieval null-rate by cluster</b><span>Where a new uncovered topic appears first. Cluster the nulls and you have a ranked content backlog.</span></div>
+      <div class="cheat-item"><b>Downstream behaviour first</b><span>Retry rate, escalation to human, abandonment. The earliest honest quality signal, and it needs no scorer.</span></div>
+      <div class="cheat-item"><b>"Evals are green" is not a rebuttal</b><span>A vendor's own postmortem: users reported degradation, standard evals did not reproduce it.</span></div>
+      <div class="cheat-item"><b>Pin snapshots, log both models</b><span>An alias means "whatever that is today". Always emit <code>gen_ai.response.model</code> next to the requested model.</span></div>
+      <div class="cheat-item"><b>The clock is a dependency</b><span>Active, Legacy, Deprecated, Retired. At least 60 days' notice, and past retirement the request fails.</span></div>
+      <div class="cheat-item"><b>Staleness vs incompatibility</b><span>Staleness has an SLI and a partial fix. Incompatibility has no signal and needs full re-embedding.</span></div>
+      <div class="cheat-item"><b>Sample 1-10%, and say why</b><span>Prevailing vendor guidance, not evidence. Stratify it, and calibrate the judge before you alert on it.</span></div>
+    </div>
+  </section>
+
+  <footer class="pagefoot">
+    <span>Builder session 9 of 10 · learn-ai-observability-with-phoebe · by Phoebe Fu &nbsp;·&nbsp; 📚 <a href="https://phoebefu6.github.io/learn-with-phoebe/">Learn with Phoebe ↗</a></span>
+    <span><a href="../index.html">← Course home</a> &nbsp;·&nbsp; <a href="b10-privacy-and-retention.html">Next: privacy and retention →</a></span>
+  </footer>
+
+</main>
+
+<script src="../assets/app.js?v=2"></script>
+</body>
+</html>

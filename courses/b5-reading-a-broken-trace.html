@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Builder session 5 · Reading a broken trace - learn ai observability with phoebe</title>
+<link rel="stylesheet" href="../assets/style.css?v=2">
+</head>
+<body>
+
+<div class="toolbar">
+  <div class="wrap">
+    <span class="crumb"><a href="../index.html">learn-ai-observability-with-phoebe</a> / Builder session 5 of 10</span>
+    <button class="btn" id="toggle-all" type="button">Expand all</button>
+    <button class="btn primary" id="zoom-toggle" type="button">Projector zoom: off</button>
+  </div>
+</div>
+
+<header class="masthead">
+  <div class="wrap">
+    <div class="eyebrow">Learn AI Observability with Phoebe · Builder track · Session 5 of 10</div>
+    <h1>Reading a broken trace: <span class="accent">the five questions, and the span nobody recorded</span></h1>
+    <p class="sub">This is the centre of the course. One run, one bad answer, eight rungs of instrumentation, and a simulator that recomputes the arithmetic in front of you every time you change what the system reports about itself. You will watch a diagnosis go from impossible to provable without anybody touching the application code, and then watch the most tempting lever of all add ten times the storage and not one new answer.</p>
+    <div class="chip-row">
+      <span class="chip level">🟠 Builder track</span>
+      <span class="chip audience">AI engineers · platform engineers · technical PMs</span>
+      <span class="chip time">45 min</span>
+    </div>
+    <div class="agenda">
+      <span class="a1" style="flex:1">0-3 · Welcome</span>
+      <span class="a2" style="flex:3">3-14 · The five questions</span>
+      <span class="a3" style="flex:7">14-40 · Three simulators</span>
+      <span class="a4" style="flex:1">40-45 · Q&amp;A</span>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <!-- ============ INTRO ============ -->
+  <section class="section" id="intro">
+    <div class="section-kicker">
+      <span class="klabel">Part 0</span>
+      <h2>A diagnosis is not a feeling, it is five answers</h2>
+    </div>
+    <p class="lede">Tuesday 09:14. Beacon's Insight Bot is sending executives stale revenue numbers, intermittently. No error is raised, no alert fires, the p95 latency dashboard is green, and the answers read as confidently as ever. An engineer opens the trace at 09:20 and closes it at 09:21, because there is genuinely nothing in it to see. Today you find the bug, and the thing you change to find it is not the application - it is what the application reports about itself.</p>
+    <div class="legend">
+      <span class="pill solid">Live - presented in session</span>
+      <span class="pill light">Self-study - read after class</span>
+      <span class="pill inkpill">Official sources covered</span>
+    </div>
+    <div class="callout win">
+      <strong>★ What you walk out with today</strong>
+      The five questions that constitute a diagnosis and the exact coverage each one requires, the experience of watching visible wall clock jump from 32.4% to 100% while the diagnosis moves from zero answers to one, the mechanism by which a swallowed exception holds a dashboard green through an entire incident, and a first-hand demonstration that full content capture multiplies your retention by 10.5x and answers nothing.
+    </div>
+    <div class="callout tip">
+      <strong>The honesty rail, stated plainly and repeated on screen</strong>
+      The incident and its spans are <strong>constructed</strong> for this exercise. They use real OpenTelemetry GenAI attribute keys and a realistic failure, but nothing here was captured from a live system, and the bot is a teaching model rather than a product. What is <strong>real</strong> is the arithmetic: the unaccounted-time percentage, the cost per run and the retention volumes are computed live in your browser from the span table and your lever settings, with nothing hard-coded per step. Two of the keys on that trace, <code>gen_ai.retrieval.cache_fallback</code> and <code>cache.entry_age_hours</code>, are application-defined rather than conventions, because the registry has no name for either - which is itself worth noticing.
+    </div>
+  </section>
+
+  <!-- ============ PART 1 ============ -->
+  <section class="section" id="five">
+    <div class="section-kicker">
+      <span class="klabel">Part 1 · the five questions</span>
+      <h2>What you have to be able to answer <span class="tag concept">6 min live</span></h2>
+    </div>
+    <p class="lede">"The bot gave a wrong number" is a report, not a diagnosis. A diagnosis is five specific answers, and the useful thing about writing them down is that each one has a different coverage prerequisite. You cannot buy them in bulk and you cannot get them from the same lever.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 460" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="The five diagnostic questions, the instrumentation each requires, and the rung of the coverage ladder at which each becomes answerable.">
+        <style>
+          .fqH { font: 700 13px Inter, sans-serif; fill: #1B2230; }
+          .fqT { font: 700 11px Inter, sans-serif; fill: #FFFFFF; }
+          .fqQ { font: 700 11px Inter, sans-serif; fill: #1B2230; }
+          .fqM { font: 400 11px ui-monospace, Menlo, monospace; fill: #16305C; }
+          .fqN { font: 700 11px Inter, sans-serif; fill: #0891A6; }
+          .fqI { font: 400 11px Inter, sans-serif; fill: #08323A; }
+          .fqK { font: 600 12.5px Inter, sans-serif; fill: #08323A; }
+        </style>
+
+        <text class="fqH" x="24" y="30">A diagnosis is five answers, and no two of them come from the same lever</text>
+
+        <rect x="24" y="44" width="832" height="30" rx="8" fill="#16305C"/>
+        <text class="fqT" x="44" y="64">The question</text>
+        <text class="fqT" x="356" y="64">What must be instrumented</text>
+        <text class="fqT" x="708" y="64">Answerable at</text>
+
+        <rect x="24" y="80" width="832" height="44" rx="6" fill="#FFFFFF" stroke="#C7CFDA" stroke-width="1"/>
+        <text class="fqQ" x="44" y="107">Which step is actually slow?</text>
+        <text class="fqM" x="356" y="107">retrieval spans exist at all</text>
+        <text class="fqN" x="708" y="107">rung 3 · 1 of 5</text>
+
+        <rect x="24" y="128" width="832" height="44" rx="6" fill="#EDF2FB" stroke="#AFC0E4" stroke-width="1"/>
+        <text class="fqQ" x="44" y="155">Did retrieval return anything?</text>
+        <text class="fqM" x="356" y="155">+ gen_ai.retrieval.documents.count</text>
+        <text class="fqN" x="708" y="155">rung 4 · 2 of 5</text>
+
+        <rect x="24" y="176" width="832" height="44" rx="6" fill="#FFFFFF" stroke="#C7CFDA" stroke-width="1"/>
+        <text class="fqQ" x="44" y="203">Where did the stale number come from?</text>
+        <text class="fqM" x="356" y="203">+ db.query and cache.get children</text>
+        <text class="fqN" x="708" y="203">rung 5 · 3 of 5</text>
+
+        <rect x="24" y="224" width="832" height="44" rx="6" fill="#EDF2FB" stroke="#AFC0E4" stroke-width="1"/>
+        <text class="fqQ" x="44" y="251">Why did nothing alert?</text>
+        <text class="fqM" x="356" y="251">+ span status and error.type</text>
+        <text class="fqN" x="708" y="251">rung 6 · 4 of 5</text>
+
+        <rect x="24" y="272" width="832" height="44" rx="6" fill="#FFFFFF" stroke="#C7CFDA" stroke-width="1"/>
+        <text class="fqQ" x="44" y="299">Is it intermittent or constant?</text>
+        <text class="fqM" x="356" y="299">+ gen_ai.conversation.id</text>
+        <text class="fqN" x="708" y="299">rung 7 · 5 of 5</text>
+
+        <rect x="24" y="332" width="832" height="52" rx="10" fill="#E4F6F9" stroke="#0891A6" stroke-width="1.5"/>
+        <text class="fqI" x="44" y="354">Rungs 1 and 2 answer none of them, and rung 8 answers no more than rung 7. Five</text>
+        <text class="fqI" x="44" y="372">of the eight levers are load-bearing. The other three buy something else, or nothing.</text>
+
+        <rect x="24" y="400" width="832" height="44" rx="10" fill="#FFFFFF" stroke="#C7CFDA" stroke-width="1.5"/>
+        <rect x="42" y="414" width="14" height="14" rx="3" fill="#0891A6"/>
+        <text class="fqK" x="66" y="426">Write the five questions down first. Then every coverage gap arrives as a ticket, not a mood.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - the five questions and their coverage prerequisites, in the order the simulator unlocks them</figcaption>
+    </figure>
+
+    <p>The order matters more than it looks. The first question - which step is slow - is the one every team instruments for, because latency is what dashboards are made of. It is also the <em>least</em> useful of the five here: the retrieval step in this incident is 4.2 seconds of a 6.8 second run, and knowing that tells you where to look and nothing about what is wrong. Slow was never the bug. Slow was the symptom that made the bug findable.</p>
+
+    <div class="prompt-box good">
+      <span class="label">★ The 90-second read order, for any trace, any system</span>
+      <p>1. Does the wall clock add up?      root duration vs the union of the children
+2. What is the widest span?         and is it a model call or something else
+3. What did that step return?       counts, row counts, document counts, ids
+4. Did anything fail quietly?       status, error.type, recorded exceptions
+5. Is this run unusual?             thread by conversation id and compare
+
+If step 1 fails, stop. Everything after it is a guess about a system
+you are not currently observing.</p>
+    </div>
+  </section>
+
+  <!-- ============ PART 2 ============ -->
+  <section class="section" id="chain">
+    <div class="section-kicker">
+      <span class="klabel">Part 2 · the chain</span>
+      <h2>Five links, and the last one is silent <span class="tag concept">5 min live</span></h2>
+    </div>
+    <p class="lede">Here is the whole incident, resolved, so you can watch it appear rather than guess at it. Read the right-hand column as a shopping list: each link in the chain has exactly one piece of telemetry that would have named it, and the team had none of them.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 454" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="The causal chain of the incident: query timeout, swallowed exception, stale cache fallback, empty retrieval, and a faithful summary of stale data which no span can flag.">
+        <style>
+          .ccH { font: 700 13px Inter, sans-serif; fill: #1B2230; }
+          .ccC { font: 700 11px Inter, sans-serif; fill: #66707E; }
+          .ccX { font: 400 11px Inter, sans-serif; fill: #1B2230; }
+          .ccM { font: 400 11px ui-monospace, Menlo, monospace; fill: #16305C; }
+          .ccR { font: 400 11px Inter, sans-serif; fill: #991B1B; }
+          .ccRM { font: 400 11px ui-monospace, Menlo, monospace; fill: #991B1B; }
+          .ccK { font: 600 12.5px Inter, sans-serif; fill: #08323A; }
+        </style>
+
+        <text class="ccH" x="24" y="30">Five links in one chain, and the span that would have named each</text>
+        <text class="ccC" x="24" y="52">WHAT HAPPENED</text>
+        <text class="ccC" x="478" y="52">THE TELEMETRY THAT SAYS SO</text>
+
+        <rect x="24" y="64" width="424" height="56" rx="9" fill="#EDF2FB" stroke="#AFC0E4" stroke-width="1.5"/>
+        <text class="ccX" x="44" y="88">The warehouse query times out after 4.1 seconds</text>
+        <text class="ccX" x="44" y="106">and comes back with nothing.</text>
+        <path d="M454 92 L466 92 M466 86 L474 92 L466 98 Z" stroke="#66707E" stroke-width="1.5" fill="#66707E"/>
+        <rect x="478" y="64" width="378" height="56" rx="9" fill="#FFFFFF" stroke="#C7CFDA" stroke-width="1.5"/>
+        <text class="ccM" x="496" y="88">db.query warehouse.metrics_daily</text>
+        <text class="ccM" x="496" y="106">db.response.returned_rows = 0</text>
+
+        <rect x="24" y="128" width="424" height="56" rx="9" fill="#EDF2FB" stroke="#AFC0E4" stroke-width="1.5"/>
+        <text class="ccX" x="44" y="152">A try/except catches the timeout, and nobody</text>
+        <text class="ccX" x="44" y="170">sets the span status on the failure path.</text>
+        <path d="M454 156 L466 156 M466 150 L474 156 L466 162 Z" stroke="#66707E" stroke-width="1.5" fill="#66707E"/>
+        <rect x="478" y="128" width="378" height="56" rx="9" fill="#FFFFFF" stroke="#C7CFDA" stroke-width="1.5"/>
+        <text class="ccM" x="496" y="152">error.type = QueryTimeout</text>
+        <text class="ccM" x="496" y="170">span status ERROR + record_exception</text>
+
+        <rect x="24" y="192" width="424" height="56" rx="9" fill="#EDF2FB" stroke="#AFC0E4" stroke-width="1.5"/>
+        <text class="ccX" x="44" y="216">The fallback path quietly serves a cache entry</text>
+        <text class="ccX" x="44" y="234">that is 19.4 hours old.</text>
+        <path d="M454 220 L466 220 M466 214 L474 220 L466 226 Z" stroke="#66707E" stroke-width="1.5" fill="#66707E"/>
+        <rect x="478" y="192" width="378" height="56" rx="9" fill="#FFFFFF" stroke="#C7CFDA" stroke-width="1.5"/>
+        <text class="ccM" x="496" y="216">cache.get metrics_snapshot</text>
+        <text class="ccM" x="496" y="234">cache.entry_age_hours = 19.4</text>
+
+        <rect x="24" y="256" width="424" height="56" rx="9" fill="#EDF2FB" stroke="#AFC0E4" stroke-width="1.5"/>
+        <text class="ccX" x="44" y="280">Retrieval therefore returns no documents at</text>
+        <text class="ccX" x="44" y="298">all, and reports success.</text>
+        <path d="M454 284 L466 284 M466 278 L474 284 L466 290 Z" stroke="#66707E" stroke-width="1.5" fill="#66707E"/>
+        <rect x="478" y="256" width="378" height="56" rx="9" fill="#FFFFFF" stroke="#C7CFDA" stroke-width="1.5"/>
+        <text class="ccM" x="496" y="280">gen_ai.retrieval.documents.count = 0</text>
+        <text class="ccM" x="496" y="298">gen_ai.retrieval.cache_fallback = true</text>
+
+        <rect x="24" y="320" width="424" height="56" rx="9" fill="#FEF2F2" stroke="#FCA5A5" stroke-width="1.5"/>
+        <text class="ccR" x="44" y="344">The model summarises the stale data faithfully.</text>
+        <text class="ccR" x="44" y="362">Status OK. Dashboard green. CFO informed.</text>
+        <path d="M454 348 L466 348 M466 342 L474 348 L466 354 Z" stroke="#991B1B" stroke-width="1.5" fill="#991B1B"/>
+        <rect x="478" y="320" width="378" height="56" rx="9" fill="#FEF2F2" stroke="#FCA5A5" stroke-width="1.5"/>
+        <text class="ccRM" x="496" y="344">nothing</text>
+        <text class="ccR" x="496" y="362">No span fails here. Nothing failed here.</text>
+
+        <rect x="24" y="392" width="832" height="44" rx="10" fill="#FFFFFF" stroke="#C7CFDA" stroke-width="1.5"/>
+        <rect x="42" y="406" width="14" height="14" rx="3" fill="#0891A6"/>
+        <text class="ccK" x="66" y="418">The model did its job perfectly. That is why capturing what it said explains nothing.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - the causal chain, and the one link no telemetry can flag</figcaption>
+    </figure>
+
+    <div class="callout warn">
+      <strong>The last row is the whole reason the anti-lever exists</strong>
+      Four of the five links have a telemetry signal. The fifth does not, because at that point in the chain the system is behaving correctly: given stale inputs, the model produced an accurate summary of stale inputs. Everything you could capture about the model - the prompt, the completion, the finish reason, the token counts - looks completely healthy. Hold onto that when you reach rung 8 of the ladder and are tempted to store everything.
+    </div>
+  </section>
+
+  <!-- ============ DEMO 1 ============ -->
+  <section class="section" id="demo-1">
+    <div class="section-kicker">
+      <span class="klabel">Demo 1 of 3</span>
+      <h2>The climb: eight rungs from blind to provable <span class="tag demo">★ 12 min · watch, then argue</span></h2>
+    </div>
+    <p class="lede">Step through these in order and read the caption before you look at the meters. The application code never changes across these eight rungs. Only what it reports about itself changes, which is the entire claim of this course made falsifiable in a browser.</p>
+
+    <div class="tlbox" data-mode="ladder"></div>
+
+    <div class="callout warn">
+      <strong>Rung 1 is not a strawman - it is what most teams have in production right now</strong>
+      Three spans: the root plus the two model calls, because the SDK gave you those for free. Everything is fast, everything is status OK. <strong>32.4% of the wall clock is visible, which means 4.60 seconds of a 6.80 second run is inside no span you emit</strong>, and the diagnosis stands at <strong>0 of 5</strong>. Nothing on that screen looks wrong. That is the point of it. An engineer looking at this trace during the incident was not careless, and would not have found the bug by looking harder.
+    </div>
+
+    <p>Rung 2 adds tool spans and takes visible wall clock from 32.4% to <strong>38.2%</strong>. The diagnosis stays at <strong>0 of 5</strong>. Sit with that for a moment, because it is the most expensive lesson on the page: tools are the easy thing to instrument, they are what a framework integration hands you first, and in this incident they were never where the time went. A team can spend a sprint on tool instrumentation, feel productive, ship a nicer waterfall, and be exactly as blind as they started.</p>
+
+    <p>Rung 3 adds the retriever span and the number moves to <strong>100%</strong>. The 4.2 second step appears out of nowhere and the unaccounted-time warning disappears entirely. The diagnosis goes to <strong>1 of 5</strong>. This is worth naming precisely: <strong>you now have complete coverage of time and 20% of a diagnosis</strong>. Accounting for every millisecond tells you where to look. It does not tell you what you are looking at.</p>
+
+    <p>Rung 4 adds the retrieval attributes and the sentence changes shape. <code>gen_ai.retrieval.documents.count</code> is zero and <code>gen_ai.retrieval.cache_fallback</code> is true, so <strong>the step is not slow, it is empty</strong> - and something quietly substituted cached data for the answer. <strong>2 of 5</strong>. Rung 5 goes one level deeper into the database and cache children and locates the root cause physically: the query returned <strong>zero rows after 4.1 seconds</strong>, and a cache entry <strong>19.4 hours old</strong> was served in its place. That is the stale number the CFO read at 09:14, now pinned to an exact span. <strong>3 of 5</strong>.</p>
+
+    <p>Rung 6 is the one that explains the silence. The query did not return empty, it <strong>timed out</strong> - and someone caught the exception, fell back to cache and returned success. <strong>That swallowed exception is why nothing alerted and why the dashboard stayed green through the entire incident.</strong> <strong>4 of 5</strong>. Rung 7 threads conversations and adds the token attributes: the failure is <strong>intermittent</strong> rather than constant, which is a different fix, and the run's cost becomes knowable at <strong>$0.0180</strong> using the per-span token work from session b4. <strong>5 of 5</strong>. You can write the postmortem from the trace.</p>
+
+    <div class="prompt-box good">
+      <span class="label">★ Rung 6 in four lines - the whole difference between green and red</span>
+      <p>try:
+    rows = warehouse.query(sql, timeout=4.0)
+except QueryTimeout as e:
+    span.set_status(Status(StatusCode.ERROR))     # <- the missing line
+    span.record_exception(e)                      # <- the other missing line
+    span.set_attribute("gen_ai.retrieval.cache_fallback", True)
+    rows = cache.get("metrics_snapshot")          # served 19.4 hours stale</p>
+    </div>
+
+    <div class="callout win">
+      <strong>Rung 8 is the trap, and it is the lever most teams pull first</strong>
+      Full content capture: every prompt, every completion, stored. The diagnosis score <strong>does not move</strong>. It was already 5 of 5, and the message content was never the problem, <em>because the model summarised the stale data perfectly well</em> - the prompt was reasonable, the answer was well written, the finish reason was clean. What does move is retention, from <strong>4.6 GB to 48.1 GB, a factor of 10.5</strong>, and the PII flag, which flips to true because you have just put raw customer text into a log store. This is the only rung on the ladder that costs you something and returns nothing, and it is the one that feels most like progress.
+    </div>
+  </section>
+
+  <!-- ============ DEMO 2 ============ -->
+  <section class="section" id="demo-2">
+    <div class="section-kicker">
+      <span class="klabel">Demo 2 of 3</span>
+      <h2>Free play: get to 5 of 5 yourself <span class="tag demo">★ 10 min · everyone builds</span></h2>
+    </div>
+    <p class="lede">Same incident, all eight levers unlocked, nothing scripted. Work it yourself, and pay more attention to the levers you did not need than to the ones you did.</p>
+
+    <div class="tlbox"></div>
+
+    <div class="steps">
+      <div class="step"><p>Start from nothing and get the diagnosis to <strong>5 of 5</strong>. Then write down your <strong>minimum lever set</strong> - the smallest collection of switches that answers all five questions. Compare it with the person next to you; most people arrive with at least one lever they did not need.</p></div>
+      <div class="step"><p>The minimum set is five levers: <strong>retriever spans, retrieval attributes, database and cache children, error propagation, and session IDs</strong>. Tool spans and token attributes are not required for any of the five questions - tools buy you sequencing, tokens buy you the cost figure - and content capture buys nothing at all here. Knowing which of your levers are load-bearing is what turns an instrumentation backlog into a priority order.</p></div>
+      <div class="step"><p>Now switch on <strong>tool spans alone</strong> and watch the span count grow while the diagnosis stays at 0 of 5. Then switch on <strong>retriever spans alone</strong>, with tools off, and watch the diagnosis reach 1 of 5 immediately. One lever is instrumentation theatre on this incident and the other is the whole game, and nothing about their names tells you which is which in advance.</p></div>
+      <div class="step"><p>Turn on the database and cache children and watch the <strong>visible wall clock stay exactly where it was</strong>. Those spans are children of the retrieval span, so they add no new accounted time - the time was already counted by their parent. Accounting for time is a property of the top level of the tree; depth beyond that buys meaning, not minutes. This is the single most common misreading of a coverage metric.</p></div>
+      <div class="step"><p>Finally, turn the token attributes on and off and watch the cost meter flip between <strong>$0.0180</strong> and <strong>unknown</strong>. Nothing about the run changed. The money was always being spent; without the attributes it was simply not attributable to this user, this feature or this failure.</p></div>
+    </div>
+
+    <div class="callout tip">
+      <strong>The question to take back to your own system</strong>
+      For each of the five questions, name the attribute in <em>your</em> telemetry that answers it, today, on last Tuesday's traffic. Every question where you cannot name one is a coverage gap with an owner and a size, which is a very different object from a general feeling that observability could be better.
+    </div>
+  </section>
+
+  <!-- ============ DEMO 3 ============ -->
+  <section class="section" id="demo-3">
+    <div class="section-kicker">
+      <span class="klabel">Demo 3 of 3</span>
+      <h2>What the anti-lever actually costs, at every scale <span class="tag demo">★ 6 min · read the ratio</span></h2>
+    </div>
+    <p class="lede">Rung 8 added no answers. Here is what it added instead, computed live across five traffic volumes from a modelled 4 KB base trace, 38 KB of message content and $0.28 per GB-month. Substitute your own storage price and your own traffic; the interesting column is not the dollars.</p>
+
+    <div class="tlbox" data-mode="cost"></div>
+
+    <div class="steps">
+      <div class="step"><p>Read the <strong>Multiple</strong> column top to bottom. It is <strong>10.5x at every single row</strong>, because it is a ratio of bytes and ratios do not care about scale. Content capture does not cost a little more when you are small and a lot more when you are large - it costs the same order of magnitude more at every scale you will ever operate at.</p></div>
+      <div class="step"><p>Now read the dollars at 1,000 runs per day, where the extra rounds to <strong>$0</strong>. That row is how content capture gets switched on during a quiet week in a pre-production environment and never switched off. The decision was made when it was free and it is still in force at a million runs a day.</p></div>
+      <div class="step"><p>Then read the dollars at the top row and notice they are still modest. <strong>Money is not the argument</strong> - the argument is that you have converted a telemetry store into a system holding raw customer text, usually in third-party SaaS, usually with far broader internal read access than the production database the same text came from. Session b10 does the legal and retention arithmetic properly.</p></div>
+      <div class="step"><p>Decide your own policy in one sentence before you leave: metadata at 100%, content sampled, redacted, or scoped to the traces that need it. Write down which of the three you chose. The specification's own default is the first pattern - do not record instructions, inputs or outputs - and the second is described as best suited to pre-production.</p></div>
+    </div>
+
+    <div class="callout warn">
+      <strong>The honest cost of the honest default</strong>
+      Metadata-rich and content-poor is the right default and it is not free. With content off you can localise a failure to a step, name the step, and prove what it returned - which is exactly what the eight rungs above just did - but you often cannot explain <em>why</em> the model chose what it chose. This incident is the friendly case, where the model was innocent. Session b6 catalogues the cases where it is not, and b10 designs the sampled, consented, time-boxed exception that covers them without holding your whole traffic in plain text.
+    </div>
+  </section>
+
+  <!-- ============ HOMEWORK ============ -->
+  <section class="section" id="exercise">
+    <div class="section-kicker">
+      <span class="klabel">Homework</span>
+      <h2>Try it yourself - this week <span class="tag exercise">◐ 50-60 min total</span></h2>
+    </div>
+    <ul>
+      <li>Take the five questions to your own most recent incident and answer them from the telemetry you already had at the time - not from what you eventually worked out in Slack. Score yourself out of five. The gap between that score and five is your instrumentation roadmap, in priority order, with no strategy work required.</li>
+      <li>Compute visible wall clock on one real trace: root duration minus the union of your top-level children, over root duration. If you are below 60% you are in rung 1 or 2 territory, and the useful next move is almost certainly one span around whatever data-fetching step your team thinks of as plumbing.</li>
+      <li>Grep every <code>except</code> block in the path of an AI request and count how many set span status before returning a fallback. Each one that does not is a private, silent rung 6 waiting to happen. Fix the one wrapped around your data source first.</li>
+      <li>Find out whether content capture is currently on in any environment you own, and who turned it on. If the answer is "it was on by default in the library we adopted", check the retention window and the access list on that store today rather than at the next audit.</li>
+      <li>Run the free-play board once more and deliberately try to reach 5 of 5 with the fewest levers. Then map each of those five levers to a named owner and a ticket in your own system. Five tickets is a completely tractable quarter, and it is the difference between this session being interesting and this session being useful.</li>
+    </ul>
+  </section>
+
+  <!-- ============ SOURCES ============ -->
+  <section class="section" id="official">
+    <div class="section-kicker">
+      <span class="klabel">Source material</span>
+      <h2>Official sources covered</h2>
+    </div>
+    <p class="lede">The incident is constructed; the attribute keys and the arithmetic are not. Every key on the simulated trace comes from a primary source - the OpenTelemetry GenAI semantic conventions and the general database conventions - catalogued in this course's source map and verified 2026-08-13. This page covers:</p>
+    <div class="covered">
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Reading a span tree for unaccounted time: root duration against the union of top-level children</span><span class="note">Part 1 and Demo 2 · computed live, 32.4% to 100% across the climb</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Span status, <code>error.type</code> and recorded exceptions as the only signal a caught failure ever leaves</span><span class="note">Demo 1 rung 6 · the mechanism behind the green dashboard</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Retrieval telemetry: <code>gen_ai.retrieval.documents.count</code>, and <code>db.response.returned_rows</code> from the database conventions</span><span class="note">Part 2 and Demo 1 rungs 4-5 · empty is not slow</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name"><code>gen_ai.conversation.id</code> as the join key across turns, and the spec's prohibition on fabricating one</span><span class="note">Rung 7 · intermittent versus constant is a different bug</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Content capture is Opt-In and off by default, with three usage patterns in the spec's own order</span><span class="note">Demo 3 · named here, designed properly in b10</span></div>
+      <div class="covered-row"><span class="status pill light">◐</span><span class="name">The incident itself, its timings and its two application-defined keys (<code>cache_fallback</code>, <code>entry_age_hours</code>)</span><span class="note">Constructed for teaching · no convention exists for either key, and the registry is worth checking before you invent your own</span></div>
+      <div class="covered-row"><span class="status pill light">◐</span><span class="name">Retention volumes and cost per run</span><span class="note">Modelled unit economics (4 KB base, 38 KB content, $0.28/GB-month, $3.00/$15.00 per million tokens, read 2026-08-13) computed live in the browser</span></div>
+      <div class="covered-row"><span class="status pill light">◐</span><span class="name">Everything in the GenAI conventions is Development status with no tagged release</span><span class="note">Stated once per page by policy · check the repository before shipping any key from this course</span></div>
+      <div class="covered-row"><span class="status pill light">◐</span><span class="name">Which traces to keep, and what to alert on</span><span class="note">Not covered by design · sampling is b7, alerting and SLOs are b8</span></div>
+    </div>
+  </section>
+
+  <!-- ============ QUIZ ============ -->
+  <section class="section" id="quiz">
+    <div class="section-kicker">
+      <span class="klabel">Check yourself</span>
+      <h2>Three questions before you go 🎯 <span class="tag exercise">◐ 90 seconds</span></h2>
+    </div>
+    <div class="quiz-q" data-answer="2">
+      <p class="qtext">1 · Adding tool spans took visible wall clock from 32.4% to 38.2% and left the diagnosis at 0 of 5. Why is that the most important rung on the ladder?</p>
+      <button class="qopt" type="button">A · Because tool spans are badly designed in the conventions</button>
+      <button class="qopt" type="button">B · Because it proves coverage metrics are not worth tracking</button>
+      <button class="qopt" type="button">C · Because tools are the easy layer to instrument and were never where the time went, so a whole sprint of real work can leave you exactly as blind as you started while feeling like progress</button>
+      <p class="qwhy">Framework integrations hand you tool spans early, so they are what teams ship first. On this incident the missing 4.60 seconds was entirely inside a retrieval step that nobody had wrapped, and no amount of tool detail reaches it. The lesson is not that tool spans are useless - it is that coverage has to be chosen against the questions you need to answer, before you know which step will break.</p>
+    </div>
+    <div class="quiz-q" data-answer="0">
+      <p class="qtext">2 · At rung 8 you capture every prompt and completion. Retention goes from 4.6 GB to 48.1 GB, a factor of 10.5, and the PII flag flips to true. The diagnosis stays at 5 of 5. Why does it not improve?</p>
+      <button class="qopt" type="button">A · Because the message content was never the problem - the model faithfully summarised the stale data it was given, so the prompt, the completion and the finish reason all look completely healthy</button>
+      <button class="qopt" type="button">B · Because the simulator does not model content capture properly</button>
+      <button class="qopt" type="button">C · Because the diagnosis score is capped at 5 regardless of coverage</button>
+      <p class="qwhy">Trace the causal chain and the last link has no telemetry signal at all, because at that point nothing is failing: given stale inputs, the model produced an accurate summary of stale inputs. Content capture is the lever that feels most like debugging and, on this class of failure, contributes nothing while multiplying your retention and converting a telemetry store into a system holding raw customer text.</p>
+    </div>
+    <div class="quiz-q" data-answer="1">
+      <p class="qtext">3 · The p95 latency dashboard was green and no alert fired, yet the warehouse query had timed out. What made the system structurally incapable of telling anyone?</p>
+      <button class="qopt" type="button">A · The alert thresholds were set too high for this traffic pattern</button>
+      <button class="qopt" type="button">B · The timeout was caught, the code fell back to a 19.4-hour-old cache entry and returned success, and nobody set span status or recorded the exception - so the failure left no signal for any threshold to act on</button>
+      <button class="qopt" type="button">C · The trace was dropped by the sampler before it reached the backend</button>
+      <p class="qwhy">No threshold can fire on a signal that was never emitted. The two missing lines are <code>set_status(ERROR)</code> and <code>record_exception(e)</code> in the except block, and their absence is what separates a system that is degraded and knows it from a system that is degraded and reports itself healthy. This is also why session b8's alerting work has to sit on top of coverage work rather than beside it.</p>
+    </div>
+    <p class="quiz-score"></p>
+  </section>
+
+  <!-- ============ CHEAT SHEET ============ -->
+  <section class="cheat" id="cheatsheet">
+    <h3>Builder session 5 cheat sheet <span>· pin this</span></h3>
+    <div class="grid-2">
+      <div class="cheat-item"><b>The five questions</b><span>Which step is slow · did retrieval return anything · where did the stale number come from · why did nothing alert · is it intermittent.</span></div>
+      <div class="cheat-item"><b>Rung 1 reality</b><span>32.4% of wall clock visible, 4.60s of 6.80s missing, 0 of 5 answerable. Nothing on screen looks wrong.</span></div>
+      <div class="cheat-item"><b>Tools are theatre here</b><span>Rung 2 takes coverage to 38.2% and the diagnosis stays at 0 of 5. Easy to instrument is not the same as load-bearing.</span></div>
+      <div class="cheat-item"><b>100% is not a diagnosis</b><span>Rung 3 accounts for every millisecond and answers 1 of 5. Time coverage tells you where, attributes tell you what.</span></div>
+      <div class="cheat-item"><b>Empty, not slow</b><span>Zero documents plus cache_fallback true. The 4.2s step was not slow work, it was no work.</span></div>
+      <div class="cheat-item"><b>The green dashboard</b><span>Timeout caught, 19.4-hour cache served, success returned, status never set. A swallowed exception is the whole mechanism.</span></div>
+      <div class="cheat-item"><b>Minimum lever set</b><span>Retriever spans, retrieval attributes, db/cache children, error propagation, session ids. Five of eight get you to 5 of 5.</span></div>
+      <div class="cheat-item"><b>The anti-lever</b><span>Full content capture: 4.6 GB to 48.1 GB (10.5x), PII true, still 5 of 5. The multiple is constant at every scale.</span></div>
+    </div>
+  </section>
+
+  <footer class="pagefoot">
+    <span>Builder session 5 of 10 · learn-ai-observability-with-phoebe · by Phoebe Fu &nbsp;·&nbsp; 📚 <a href="https://phoebefu6.github.io/learn-with-phoebe/">Learn with Phoebe ↗</a></span>
+    <span><a href="../index.html">← Course home</a> &nbsp;·&nbsp; <a href="b6-the-failure-taxonomy.html">Next: The failure taxonomy →</a></span>
+  </footer>
+
+</main>
+
+<script src="../assets/trace-live.js?v=2"></script>
+<script src="../assets/app.js?v=2"></script>
+</body>
+</html>

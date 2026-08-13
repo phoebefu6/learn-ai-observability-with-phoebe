@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>learn ai observability with phoebe - the trace, and what actually happened</title>
+<link rel="stylesheet" href="assets/style.css?v=2">
+<style>
+  .stats-row { display: flex; gap: 2.4rem; margin-top: 1.5rem; flex-wrap: wrap; }
+  .stat b { display: block; font-size: 2.1rem; font-weight: 800; line-height: 1.05; font-variant-numeric: tabular-nums; }
+  .stat span { font-size: .72rem; opacity: .85; text-transform: uppercase; letter-spacing: .09em; font-weight: 600; }
+
+  .course-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr)); gap: 1rem; margin-top: 1.5rem; }
+  .course-card {
+    border: 1px solid var(--hairline);
+    border-top: 4px solid var(--diff, var(--indigo));
+    border-radius: var(--radius);
+    padding: 1.2rem 1.3rem 1.1rem;
+    display: flex;
+    flex-direction: column;
+    gap: .5rem;
+    text-decoration: none;
+    color: var(--ink);
+    background: #fff;
+    transition: box-shadow .15s ease, border-color .15s ease, transform .15s ease;
+    position: relative;
+  }
+  .course-card:hover { border-color: var(--indigo-soft); border-top-color: var(--diff, var(--indigo)); box-shadow: 0 8px 28px rgba(22,48,92,.14); transform: translateY(-3px); }
+  .course-card .cicon { font-size: 1.7rem; line-height: 1; }
+  .course-card .cnum { font-size: .72rem; font-weight: 700; color: var(--indigo); text-transform: uppercase; letter-spacing: .1em; }
+  .course-card h3 { font-size: 1.05rem; font-weight: 800; line-height: 1.3; }
+  .course-card p { font-size: .85rem; color: var(--muted); flex: 1; }
+  .course-card .meta { display: flex; gap: .4rem; flex-wrap: wrap; }
+
+  .diff-legend { display: flex; gap: 1rem; margin-top: 1.6rem; font-size: .74rem; color: var(--muted); font-weight: 600; flex-wrap: wrap; }
+  .diff-legend i { display: inline-block; width: .85rem; height: .35rem; border-radius: 999px; margin-right: .35rem; vertical-align: middle; }
+
+  .paths { margin-top: 2.6rem; }
+  .paths h2 { font-size: 1.3rem; font-weight: 800; margin-bottom: .3rem; }
+  .paths .plede { color: var(--muted); font-size: .92rem; margin-bottom: .8rem; }
+  .path { display: flex; gap: .55rem; align-items: center; padding: .75rem 0; border-bottom: .5px solid var(--hairline); flex-wrap: wrap; }
+  .path:last-child { border-bottom: none; }
+  .path b { min-width: 15.5rem; font-size: .9rem; }
+  .path .pstep { background: var(--indigo-50); color: var(--indigo); border-radius: 999px; padding: .16rem .68rem; font-weight: 700; font-size: .8rem; text-decoration: none; transition: all .12s ease; }
+  .path .pstep:hover { background: var(--indigo); color: #fff; }
+  .path .parr { color: var(--faint); font-weight: 700; }
+
+  .mm-section { margin-top: 1.6rem; }
+  .mm-section h2 { font-size: 1.3rem; font-weight: 800; margin-bottom: .2rem; }
+  .mm-section .mm-lede { color: var(--muted); font-size: .92rem; margin-bottom: .4rem; }
+  .mm-wrap { border: 1px solid var(--hairline); border-radius: var(--radius); background: linear-gradient(180deg,#fff,#EDF2FB); padding: .6rem; overflow-x: auto; }
+  .mm-svg { width: 100%; height: auto; display: block; max-width: 60rem; margin: 0 auto; min-width: 34rem; }
+  .mm-link { cursor: pointer; text-decoration: none; }
+  .mm-node rect { transition: opacity .15s ease, filter .15s ease; }
+  .mm-node text { pointer-events: none; }
+  .mm-edge { transition: opacity .15s ease; }
+</style>
+</head><body>
+
+<header class="masthead">
+  <div class="wrap">
+    <div class="eyebrow">Learn AI Observability with Phoebe</div>
+    <h1>Two thirds of the run was inside no span at all</h1>
+    <p class="sub">Tuesday, 09:14. An analytics bot starts sending executives stale revenue numbers, intermittently. No error is raised. No alert fires. The p95 latency dashboard is green and the answers read as confidently as ever. The failing step is not slow, not broken and not lying - it is simply not instrumented, so as far as the trace is concerned it cannot fail at all. This course is about the trace: spans and the OpenTelemetry GenAI conventions with their real current attribute names, instrumenting an agent whose loop is width rather than depth, per-span cost and latency that survive that loop, the failure taxonomy that maps every mode to the one signal that reveals it, sampling that keeps the slow traces instead of a random 1%, burn-rate alerting instead of thresholds that cry wolf, and the privacy split that lets you debug without hoarding your users' prompts. At its centre, a live trace explorer: switch instrumentation coverage on one lever at a time and watch the visible wall clock climb from 32.4% to 100% while the diagnosis goes from zero of five questions answerable to five - then switch on full content capture and watch the diagnosis refuse to move while retention jumps ten and a half times.</p>
+    <div class="stats-row">
+      <div class="stat"><b data-count="2">2</b><span>tracks</span></div>
+      <div class="stat"><b data-count="16">16</b><span>sessions</span></div>
+      <div class="stat"><b data-count="8">8</b><span>coverage rungs</span></div>
+      <div class="stat"><b data-count="5">5</b><span>diagnostic questions</span></div>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <section class="section">
+    <div class="callout tip" style="margin-top:0">
+      <strong>Where this sits among its siblings</strong>
+      <a href="https://phoebefu6.github.io/learn-ai-evals-with-phoebe/">Learn Evals</a> owns retrieval and generation metrics. <a href="https://phoebefu6.github.io/learn-agent-launch-with-phoebe/">Agent Launch</a> owns the go/no-go decision. <a href="https://phoebefu6.github.io/learn-ai-agents-with-phoebe/">AI Agents</a> owns what an agent is. <a href="https://phoebefu6.github.io/learn-ai-infra-with-phoebe/">AI Infrastructure</a> owns the platform layers. This course owns the one thing they all assume and none of them teach: the trace. Evals tell you whether it works. Observability tells you what actually happened.
+    </div>
+
+    <div class="paths" style="margin-top:2rem">
+      <h2>The leader track 🎯 <span style="font-size:.85rem;font-weight:600;color:var(--muted)">· for the people who own the on-call rota · 6 x 45 min · no tools required</span></h2>
+      <p class="plede">Judgement mode: why a green dashboard held through a real incident, what to instrument before you know what you are looking for, which dashboards answer questions and which merely glow, what AI actually costs you once you count failed attempts, why static alert thresholds produce the same fatigue that made alarm hazards the top health-technology hazard two years running, and whether to buy, build or stay OTel-native.</p>
+    </div>
+    <div class="course-grid">
+      <a class="course-card" href="courses/a1-the-trace-is-the-receipt.html" style="--diff:#34D399">
+        <span class="cicon">🧾</span>
+        <span class="cnum">Leader 1 · easy</span>
+        <h3>The trace is the receipt</h3>
+        <p>A green dashboard held through a real incident while executives read stale numbers. Why "it works in evals" and "it worked at 09:14" are different claims, and what the second one costs.</p>
+        <span class="meta"><span class="pill amber">▶ Leaders start here</span></span>
+      </a>
+      <a class="course-card" href="courses/a2-what-to-instrument.html" style="--diff:#34D399">
+        <span class="cicon">🎛️</span>
+        <span class="cnum">Leader 2 · easy</span>
+        <h3>What to instrument before you need it</h3>
+        <p>Coverage is a decision made before you know what you are looking for. You get the model calls free, and the model calls are rarely the bug.</p>
+        <span class="meta"><span class="pill light">The decision</span></span>
+      </a>
+      <a class="course-card" href="courses/a3-dashboards-that-answer.html" style="--diff:#FBBF24">
+        <span class="cicon">📈</span>
+        <span class="cnum">Leader 3 · medium</span>
+        <h3>Dashboards that answer questions</h3>
+        <p>Three questions a trace must answer, why an aggregate p95 hid an intermittent bug, and why cardinality forces metrics and traces to do different jobs.</p>
+        <span class="meta"><span class="pill light">Signal vs glow</span></span>
+      </a>
+      <a class="course-card" href="courses/a4-what-ai-costs-you.html" style="--diff:#FBBF24">
+        <span class="cicon">💸</span>
+        <span class="cnum">Leader 4 · medium</span>
+        <h3>What AI actually costs you</h3>
+        <p>Cost per call is the wrong denominator and it moves the wrong way. Caching economics, the tokenizer that added 30% for free, and cost per successful task.</p>
+        <span class="meta"><span class="pill light">The real unit</span></span>
+      </a>
+      <a class="course-card" href="courses/a5-on-call-for-ai.html" style="--diff:#FB923C">
+        <span class="cicon">🚨</span>
+        <span class="cnum">Leader 5 · deciding</span>
+        <h3>On-call for AI</h3>
+        <p>Alarm hazards topped the health-technology hazard list two years running, and 88.8% of ICU arrhythmia alarms were false. Your Slack channel is next.</p>
+        <span class="meta"><span class="pill light">Alert fatigue</span></span>
+      </a>
+      <a class="course-card" href="courses/a6-buy-build-or-otel.html" style="--diff:#FB923C">
+        <span class="cicon">🧭</span>
+        <span class="cnum">Leader 6 · deciding</span>
+        <h3>Buy, build, or stay OTel-native</h3>
+        <p>Lock-in is an attribute-dialect problem. The market splits three ways, the licences have teeth, and one tool captures your users prompts by default.</p>
+        <span class="meta"><span class="pill light">The platform call</span></span>
+      </a>
+    </div>
+
+    <div class="paths">
+      <h2>The builder track 🛠️ <span style="font-size:.85rem;font-weight:600;color:var(--muted)">· for AI engineers, platform engineers &amp; technical PMs · 10 x 45 min · hands-on</span></h2>
+      <p class="plede">Craft mode: spans and traces from first principles, the current GenAI conventions including the names that changed under you, instrumenting a real agent loop, cost and latency attribution that survives it, a live root-cause hunt through a broken trace, the empirical failure taxonomy, sampling and what observability costs, burn-rate alerting, drift you did not deploy, and the privacy split that keeps you debuggable and compliant at once.</p>
+    </div>
+    <div class="course-grid">
+      <a class="course-card" href="courses/b1-spans-and-traces.html" style="--diff:#34D399">
+        <span class="cicon">🧱</span>
+        <span class="cnum">Builder 1 · easy</span>
+        <h3>Spans and traces</h3>
+        <p>Six words the course runs on, why a log line stops working the moment there is a loop, and the most useful number you can compute today: unaccounted time.</p>
+        <span class="meta"><span class="pill amber">▶ Builders start here</span></span>
+      </a>
+      <a class="course-card" href="courses/b2-otel-genai-conventions.html" style="--diff:#34D399">
+        <span class="cicon">📗</span>
+        <span class="cnum">Builder 2 · easy</span>
+        <h3>OTel GenAI conventions</h3>
+        <p>The exact current attribute names with their requirement levels - including the one that no longer exists, and the five events that collapsed into one.</p>
+        <span class="meta"><span class="pill light">The reference</span></span>
+      </a>
+      <a class="course-card" href="courses/b3-instrumenting-an-agent.html" style="--diff:#FBBF24">
+        <span class="cicon">🕸️</span>
+        <span class="cnum">Builder 3 · medium</span>
+        <h3>Instrumenting an agent</h3>
+        <p>The loop is width, not depth. Why plan owns its model call while tools are siblings, and why upstream ships no instrumentation for the framework you use.</p>
+        <span class="meta"><span class="pill light">The tree</span></span>
+      </a>
+      <a class="course-card" href="courses/b4-cost-and-latency-per-span.html" style="--diff:#FBBF24">
+        <span class="cicon">⏱️</span>
+        <span class="cnum">Builder 4 · medium</span>
+        <h3>Cost and latency per span</h3>
+        <p>Attribution that survives an agent loop, the double-counting trap, and the one ratio that tells you a faster model will not help.</p>
+        <span class="meta"><span class="pill light">Per-span truth</span></span>
+      </a>
+      <a class="course-card" href="courses/b5-reading-a-broken-trace.html" style="--diff:#FB923C">
+        <span class="cicon">🔍</span>
+        <span class="cnum">Builder 5 · hands-on</span>
+        <h3>Reading a broken trace</h3>
+        <p>The live hunt. Eight coverage rungs, 32.4% of the wall clock to 100%, zero of five questions to five - and one lever that changes nothing but the bill.</p>
+        <span class="meta"><span class="pill amber">★ The live trace</span></span>
+      </a>
+      <a class="course-card" href="courses/b6-the-failure-taxonomy.html" style="--diff:#FB923C">
+        <span class="cicon">🗂️</span>
+        <span class="cnum">Builder 6 · hands-on</span>
+        <h3>The failure taxonomy</h3>
+        <p>Fourteen measured failure modes from 150 annotated traces. The biggest bucket is not "the model was dumb" - it is specification and design, at 44.4%.</p>
+        <span class="meta"><span class="pill light">Mode to signal</span></span>
+      </a>
+      <a class="course-card" href="courses/b7-sampling.html" style="--diff:#FB923C">
+        <span class="cicon">🎚️</span>
+        <span class="cnum">Builder 7 · hands-on</span>
+        <h3>Sampling and its own cost</h3>
+        <p>You want the slow traces, and head sampling cannot give them to you. Tail sampling, the 30-second default that breaks on a 20-minute agent, and cardinality.</p>
+        <span class="meta"><span class="pill light">What to keep</span></span>
+      </a>
+      <a class="course-card" href="courses/b8-alerting-and-slos.html" style="--diff:#FB923C">
+        <span class="cicon">🔔</span>
+        <span class="cnum">Builder 8 · hands-on</span>
+        <h3>Alerting and SLOs</h3>
+        <p>Burn rate instead of thresholds. Five reasons static limits misfire on LLM systems, and the alerts that fire at HTTP 200.</p>
+        <span class="meta"><span class="pill light">Waking up right</span></span>
+      </a>
+      <a class="course-card" href="courses/b9-drift-and-silent-changes.html" style="--diff:#F87171">
+        <span class="cicon">🌊</span>
+        <span class="cnum">Builder 9 · hardest</span>
+        <h3>Drift and silent changes</h3>
+        <p>Four kinds of drift, three ways a provider changes the model under you, and the embedding mismatch that degrades retrieval to noise while every span stays green.</p>
+        <span class="meta"><span class="pill light">No deploy needed</span></span>
+      </a>
+      <a class="course-card" href="courses/b10-privacy-and-retention.html" style="--diff:#F87171">
+        <span class="cicon">🔐</span>
+        <span class="cnum">Builder 10 · hardest</span>
+        <h3>Privacy and retention</h3>
+        <p>Metadata at one hundred percent, content on a sample. The split that keeps you debuggable and compliant, and the model choice that overrides your policy.</p>
+        <span class="meta"><span class="pill light">Keeping it lawful</span></span>
+      </a>
+    </div>
+    <div class="diff-legend">
+      <span><i style="background:#34D399"></i>easy - everyone</span>
+      <span><i style="background:#FBBF24"></i>medium</span>
+      <span><i style="background:#FB923C"></i>hands-on / deciding</span>
+      <span><i style="background:#F87171"></i>hardest</span>
+    </div>
+
+    <div class="paths">
+      <h2>Choose your path 🗺️</h2>
+      <p class="plede">Four doors into the same conviction: an un-instrumented step cannot fail, as far as your trace is concerned.</p>
+      <div class="path"><b>🎯 I own the on-call rota</b>
+        <a class="pstep" href="courses/a1-the-trace-is-the-receipt.html">a1</a><span class="parr">→</span>
+        <a class="pstep" href="courses/a2-what-to-instrument.html">a2</a><span class="parr">→</span>
+        <a class="pstep" href="courses/a3-dashboards-that-answer.html">a3</a><span class="parr">→</span>
+        <a class="pstep" href="courses/a4-what-ai-costs-you.html">a4</a><span class="parr">→</span>
+        <a class="pstep" href="courses/a5-on-call-for-ai.html">a5</a><span class="parr">→</span>
+        <a class="pstep" href="courses/a6-buy-build-or-otel.html">a6</a>
+      </div>
+      <div class="path"><b>🛠️ I instrument the systems</b>
+        <a class="pstep" href="courses/b1-spans-and-traces.html">b1</a><span class="parr">→</span>
+        <a class="pstep" href="courses/b2-otel-genai-conventions.html">b2</a><span class="parr">→</span>
+        <a class="pstep" href="courses/b3-instrumenting-an-agent.html">b3</a><span class="parr">→</span>
+        <a class="pstep" href="courses/b4-cost-and-latency-per-span.html">b4</a><span class="parr">→</span>
+        <a class="pstep" href="courses/b5-reading-a-broken-trace.html">b5</a><span class="parr">→</span>
+        <a class="pstep" href="courses/b6-the-failure-taxonomy.html">b6</a><span class="parr">→</span>
+        <a class="pstep" href="courses/b7-sampling.html">b7</a><span class="parr">→</span>
+        <a class="pstep" href="courses/b8-alerting-and-slos.html">b8</a><span class="parr">→</span>
+        <a class="pstep" href="courses/b9-drift-and-silent-changes.html">b9</a><span class="parr">→</span>
+        <a class="pstep" href="courses/b10-privacy-and-retention.html">b10</a>
+      </div>
+      <div class="path"><b>⚡ Something is broken right now</b>
+        <a class="pstep" href="courses/b1-spans-and-traces.html">b1</a><span class="parr">→</span>
+        <a class="pstep" href="courses/b5-reading-a-broken-trace.html">b5</a><span class="parr">→</span>
+        <a class="pstep" href="courses/b6-the-failure-taxonomy.html">b6</a>
+      </div>
+      <div class="path"><b>🚀 Full journey (instrument AND decide)</b>
+        <a class="pstep" href="courses/a1-the-trace-is-the-receipt.html">a1-a6</a><span class="parr">→</span>
+        <a class="pstep" href="courses/b1-spans-and-traces.html">b1-b10</a>
+      </div>
+    </div>
+  </section>
+
+  <section class="section mm-section">
+    <h2>The knowledge map 🧠</h2>
+    <p class="mm-lede">Both tracks at a glance - hover a session to spotlight its concepts, click any node to jump in.</p>
+    <div class="mm-wrap"><div id="mindmap"></div></div>
+  </section>
+
+  <footer class="pagefoot">
+    <span>learn-ai-observability-with-phoebe · by Phoebe Fu &nbsp;·&nbsp; 📚 <a href="https://phoebefu6.github.io/learn-with-phoebe/">Learn with Phoebe ↗</a> · Neighbours, deliberately not duplicated: Learn Evals owns the metrics, Agent Launch owns the launch decision, AI Agents owns agent architecture, AI Infrastructure owns the platform layers. This course owns the trace.</span>
+  </footer>
+</main>
+
+<script>
+window.MINDMAP_DATA = {
+  title: "Learn AI\nObservability",
+  centerColor: "#0C1F3F",
+  sessions: [
+    { label: "The trace\nis the receipt", href: "courses/a1-the-trace-is-the-receipt.html", color: "#34D399",
+      concepts: [
+        { label: "Evals vs 09:14", href: "courses/a1-the-trace-is-the-receipt.html" },
+        { label: "Green through an incident", href: "courses/a1-the-trace-is-the-receipt.html" } ] },
+    { label: "What to\ninstrument", href: "courses/a2-what-to-instrument.html", color: "#34D399",
+      concepts: [
+        { label: "Coverage is a decision", href: "courses/a2-what-to-instrument.html" },
+        { label: "Free spans, wrong layer", href: "courses/a2-what-to-instrument.html" } ] },
+    { label: "Dashboards\nthat answer", href: "courses/a3-dashboards-that-answer.html", color: "#FBBF24",
+      concepts: [
+        { label: "Three questions", href: "courses/a3-dashboards-that-answer.html" },
+        { label: "Cardinality splits the job", href: "courses/a3-dashboards-that-answer.html" } ] },
+    { label: "What AI\ncosts you", href: "courses/a4-what-ai-costs-you.html", color: "#FBBF24",
+      concepts: [
+        { label: "Cost per success", href: "courses/a4-what-ai-costs-you.html" },
+        { label: "Caching economics", href: "courses/a4-what-ai-costs-you.html" },
+        { label: "The 30% tokenizer", href: "courses/a4-what-ai-costs-you.html" } ] },
+    { label: "On-call\nfor AI", href: "courses/a5-on-call-for-ai.html", color: "#FB923C",
+      concepts: [
+        { label: "Burn rate", href: "courses/a5-on-call-for-ai.html" },
+        { label: "88.8% false alarms", href: "courses/a5-on-call-for-ai.html" } ] },
+    { label: "Buy, build,\nor OTel", href: "courses/a6-buy-build-or-otel.html", color: "#FB923C",
+      concepts: [
+        { label: "Three-way market", href: "courses/a6-buy-build-or-otel.html" },
+        { label: "Inverted defaults", href: "courses/a6-buy-build-or-otel.html" } ] },
+    { label: "Spans and\ntraces", href: "courses/b1-spans-and-traces.html", color: "#34D399",
+      concepts: [
+        { label: "Six words", href: "courses/b1-spans-and-traces.html" },
+        { label: "Unaccounted time", href: "courses/b1-spans-and-traces.html" } ] },
+    { label: "GenAI\nconventions", href: "courses/b2-otel-genai-conventions.html", color: "#34D399",
+      concepts: [
+        { label: "gen_ai.provider.name", href: "courses/b2-otel-genai-conventions.html" },
+        { label: "Deprecated names", href: "courses/b2-otel-genai-conventions.html" } ] },
+    { label: "Instrumenting\nan agent", href: "courses/b3-instrumenting-an-agent.html", color: "#FBBF24",
+      concepts: [
+        { label: "Width not depth", href: "courses/b3-instrumenting-an-agent.html" },
+        { label: "Plan owns its call", href: "courses/b3-instrumenting-an-agent.html" } ] },
+    { label: "Cost + latency\nper span", href: "courses/b4-cost-and-latency-per-span.html", color: "#FBBF24",
+      concepts: [
+        { label: "Double-counting trap", href: "courses/b4-cost-and-latency-per-span.html" },
+        { label: "model_time_fraction", href: "courses/b4-cost-and-latency-per-span.html" } ] },
+    { label: "Reading a\nbroken trace", href: "courses/b5-reading-a-broken-trace.html", color: "#FB923C",
+      concepts: [
+        { label: "32.4% to 100%", href: "courses/b5-reading-a-broken-trace.html" },
+        { label: "Five questions", href: "courses/b5-reading-a-broken-trace.html" },
+        { label: "The content trap", href: "courses/b5-reading-a-broken-trace.html" } ] },
+    { label: "Failure\ntaxonomy", href: "courses/b6-the-failure-taxonomy.html", color: "#FB923C",
+      concepts: [
+        { label: "44.4% is design", href: "courses/b6-the-failure-taxonomy.html" },
+        { label: "Absorbed errors", href: "courses/b6-the-failure-taxonomy.html" },
+        { label: "80 of 1000 differ", href: "courses/b6-the-failure-taxonomy.html" } ] },
+    { label: "Sampling", href: "courses/b7-sampling.html", color: "#FB923C",
+      concepts: [
+        { label: "Keep the slow ones", href: "courses/b7-sampling.html" },
+        { label: "decision_wait trap", href: "courses/b7-sampling.html" } ] },
+    { label: "Alerting\n+ SLOs", href: "courses/b8-alerting-and-slos.html", color: "#FB923C",
+      concepts: [
+        { label: "14.4 / 6 / 1", href: "courses/b8-alerting-and-slos.html" },
+        { label: "Alerts at HTTP 200", href: "courses/b8-alerting-and-slos.html" } ] },
+    { label: "Drift + silent\nchanges", href: "courses/b9-drift-and-silent-changes.html", color: "#F87171",
+      concepts: [
+        { label: "Pin the snapshot", href: "courses/b9-drift-and-silent-changes.html" },
+        { label: "Embedding mismatch", href: "courses/b9-drift-and-silent-changes.html" } ] },
+    { label: "Privacy +\nretention", href: "courses/b10-privacy-and-retention.html", color: "#F87171",
+      concepts: [
+        { label: "Metadata at 100%", href: "courses/b10-privacy-and-retention.html" },
+        { label: "Content on a sample", href: "courses/b10-privacy-and-retention.html" } ] }
+  ]
+};
+</script>
+<script src="assets/mindmap.js?v=2"></script>
+<script src="assets/app.js?v=2"></script>
+</body>
+</html>

@@ -1,0 +1,510 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Leader session 5 · On-call for AI - learn ai observability with phoebe</title>
+<link rel="stylesheet" href="../assets/style.css?v=2">
+</head>
+<body>
+
+<div class="toolbar">
+  <div class="wrap">
+    <span class="crumb"><a href="../index.html">learn-ai-observability-with-phoebe</a> / Leader session 5 of 6</span>
+    <button class="btn" id="toggle-all" type="button">Expand all</button>
+    <button class="btn primary" id="zoom-toggle" type="button">Projector zoom: off</button>
+  </div>
+</div>
+
+<header class="masthead">
+  <div class="wrap">
+    <div class="eyebrow">Learn AI Observability with Phoebe · Leader track · Session 5 of 6</div>
+    <h1>On-call for AI: <span class="accent">the alarm that nobody answers</span></h1>
+    <p class="sub">Alert fatigue is not a soft problem and it is not new. Hospitals measured it, published it, and ranked it as their number one technology hazard twice. This session borrows their evidence because the mechanism is identical: a channel that fires too often gets silenced, and a silenced channel is worse than no channel because everybody believes it is still watching. You leave with a written alerting policy, three burn-rate rules instead of thirty thresholds, and the list of AI failures your current error-rate alert is structurally incapable of seeing.</p>
+    <div class="chip-row">
+      <span class="chip level">🟠 Leader track</span>
+      <span class="chip audience">Heads of engineering · platform leads · SRE managers</span>
+      <span class="chip time">45 min</span>
+    </div>
+    <div class="agenda">
+      <span class="a1" style="flex:1">0-3 · Welcome</span>
+      <span class="a2" style="flex:3">3-14 · The alarm evidence</span>
+      <span class="a3" style="flex:4">14-28 · Why static thresholds misfire</span>
+      <span class="a4" style="flex:4">28-42 · Burn rate and what to alert on</span>
+      <span class="a1" style="flex:1">42-45 · Q&amp;A</span>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <!-- ============ INTRO ============ -->
+  <section class="section" id="intro">
+    <div class="section-kicker">
+      <span class="klabel">Part 0</span>
+      <h2>The failure mode is not "we missed the alert"</h2>
+    </div>
+    <p class="lede">Session a3 built dashboards that answer questions. Session a4 put a cost on every task. Both of those assume somebody is looking. This session is about the hours when nobody is looking, which is most of them, and about the specific way that goes wrong: not a missing alert, but a channel so noisy that a human made a rational decision to stop reading it.</p>
+    <div class="legend">
+      <span class="pill solid">Live - presented in session</span>
+      <span class="pill light">Self-study - read after class</span>
+      <span class="pill inkpill">Official sources covered</span>
+    </div>
+    <div class="callout win">
+      <strong>★ What you walk out with today</strong>
+      The published evidence that alert noise causes harm rather than merely annoyance, the five reasons a static threshold on an AI metric misfires in ways it never did on a web service, three burn-rate rules that replace a wall of thresholds, the list of AI failures your error-rate alert cannot see, and a one-page alerting configuration policy you can put through review this month.
+    </div>
+    <div class="callout tip">
+      <strong>One sentence for this session</strong>
+      Evals tell you whether it works. Observability tells you what actually happened. An alert is the moment observability is allowed to interrupt a person, and every alert you send that did not need sending spends down the only budget that matters here, which is their willingness to look.
+    </div>
+  </section>
+
+  <!-- ============ PART 1 ============ -->
+  <section class="section" id="evidence">
+    <div class="section-kicker">
+      <span class="klabel">Part 1 · the evidence</span>
+      <h2>Somebody already measured this, in an ICU <span class="tag concept">11 min live</span></h2>
+    </div>
+    <p class="lede">When you argue for fewer alerts, you will be told you are arguing for less safety. You are not, and you do not have to make the case from first principles, because clinical engineering made it with numbers and bodies twenty years before your Slack channel existed.</p>
+
+    <p>The ECRI Institute publishes an annual Top 10 Health Technology Hazards list. <strong>"Alarm hazards" was ranked number one in both 2013 and 2015.</strong> Not a top-ten mention. First place, twice. The 2013 edition states the causal chain plainly, and it is worth reading in the original because every clause of it has an engineering twin:</p>
+
+    <div class="callout example">
+      <span class="ex-pill">ECRI Institute, Top 10 Health Technology Hazards 2013 · verbatim</span>
+      <p>"With too many alarms sounding... staff may be more likely to experience alarm overload or 'alarm fatigue.' These conditions can lead to ineffective responses or prompt unsafe actions. For example, caregivers may turn down the volume of alarms to an inaudible level, or they may improperly adjust alarm limits outside the safe and appropriate range in an attempt to reduce the number of alarms."</p>
+    </div>
+
+    <p>By 2015 the list had narrowed its diagnosis. The hazard was no longer described as too many alarms in general but as <strong>inadequate alarm configuration policies</strong>, and ECRI notes that it had "investigated several alarm-related deaths and other cases of severe patient harm that could have been prevented had more effective alarm configuration policies been in place." That is a governance finding, not a technology finding, and it is the single most useful thing in this session: the fix they landed on was a written, reviewed policy about what is allowed to alarm and at what limits.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 500" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Drew et al 2014 ICU alarm numbers, the documented human response to them, the engineering translation, and the limit of the analogy.">
+        <style>
+          .evH { font: 700 13px Inter, sans-serif; fill: #1B2230; }
+          .evN { font: 700 22px Inter, sans-serif; fill: #16305C; }
+          .evL { font: 400 11px Inter, sans-serif; fill: #66707E; }
+          .evB { font: 700 12px Inter, sans-serif; fill: #0C1F3F; }
+          .evW { font: 400 11px Inter, sans-serif; fill: #08323A; }
+          .evT { font: 700 12.5px Inter, sans-serif; fill: #08323A; }
+          .evR { font: 400 11px Inter, sans-serif; fill: #991B1B; }
+          .evRB { font: 700 12.5px Inter, sans-serif; fill: #991B1B; }
+          .evK { font: 600 12.5px Inter, sans-serif; fill: #08323A; }
+        </style>
+
+        <text class="evH" x="24" y="36">Drew et al., PLOS ONE 2014 - 31 days, 5 adult ICUs at UCSF, 77 beds, 461 patients</text>
+
+        <rect x="24" y="52" width="200" height="96" rx="10" fill="#EDF2FB" stroke="#AFC0E4" stroke-width="1.5"/>
+        <text class="evN" x="42" y="86">2,558,760</text>
+        <text class="evL" x="42" y="106">unique alarms in total</text>
+        <text class="evL" x="42" y="121">across the 31 days</text>
+
+        <rect x="234" y="52" width="200" height="96" rx="10" fill="#EDF2FB" stroke="#AFC0E4" stroke-width="1.5"/>
+        <text class="evN" x="252" y="86">381,560</text>
+        <text class="evL" x="252" y="106">of those were audible</text>
+        <text class="evL" x="252" y="121">in the room</text>
+
+        <rect x="444" y="52" width="200" height="96" rx="10" fill="#16305C"/>
+        <text class="evN" x="462" y="86" fill="#FFFFFF">187</text>
+        <text class="evL" x="462" y="106" fill="#AFC0E4">audible alarms per bed</text>
+        <text class="evL" x="462" y="121" fill="#AFC0E4">per day</text>
+
+        <rect x="654" y="52" width="202" height="96" rx="10" fill="#0891A6"/>
+        <text class="evN" x="672" y="86" fill="#FFFFFF">88.8%</text>
+        <text class="evL" x="672" y="106" fill="#E4F6F9">of 12,671 annotated</text>
+        <text class="evL" x="672" y="121" fill="#E4F6F9">arrhythmia alarms: false</text>
+        <text class="evL" x="672" y="136" fill="#E4F6F9">positives</text>
+
+        <text class="evH" x="24" y="178">ECRI ranked alarm hazards #1 in 2013 and again in 2015. This is what people did about it.</text>
+
+        <rect x="24" y="192" width="270" height="88" rx="10" fill="#FFFFFF" stroke="#C7CFDA" stroke-width="1.5"/>
+        <text class="evB" x="42" y="214">Turn the volume down</text>
+        <text class="evL" x="42" y="234">Caregivers set alarm volume</text>
+        <text class="evL" x="42" y="249">to an inaudible level, so the</text>
+        <text class="evL" x="42" y="264">channel still exists on paper.</text>
+
+        <rect x="305" y="192" width="270" height="88" rx="10" fill="#FFFFFF" stroke="#C7CFDA" stroke-width="1.5"/>
+        <text class="evB" x="323" y="214">Widen the limits</text>
+        <text class="evL" x="323" y="234">Limits improperly adjusted</text>
+        <text class="evL" x="323" y="249">outside the safe and</text>
+        <text class="evL" x="323" y="264">appropriate range.</text>
+
+        <rect x="586" y="192" width="270" height="88" rx="10" fill="#FFFFFF" stroke="#C7CFDA" stroke-width="1.5"/>
+        <text class="evB" x="604" y="214">Respond ineffectively</text>
+        <text class="evL" x="604" y="234">ECRI investigated several</text>
+        <text class="evL" x="604" y="249">alarm-related deaths that a</text>
+        <text class="evL" x="604" y="264">policy could have prevented.</text>
+
+        <rect x="24" y="300" width="832" height="72" rx="10" fill="#E4F6F9" stroke="#0891A6" stroke-width="1.5"/>
+        <text class="evT" x="44" y="322">The engineering translation needs no adjustment at all</text>
+        <text class="evW" x="44" y="342">Mute the channel. Widen the threshold until it stops firing. Stop reading the ones that remain. That is the</text>
+        <text class="evW" x="44" y="358">ICU finding, and it is also the documented life cycle of every alerting channel that pages 40 times a night.</text>
+
+        <rect x="24" y="386" width="832" height="66" rx="10" fill="#FEF2F2" stroke="#FCA5A5" stroke-width="1.5"/>
+        <text class="evRB" x="44" y="408">The limit of the analogy - say this part out loud</text>
+        <text class="evR" x="44" y="428">LLM systems add a failure mode a hospital monitor does not have: the SILENT failure. Not an alarm that</text>
+        <text class="evR" x="44" y="444">screams too often, but a monitor reading perfectly normal because nobody ever attached the lead.</text>
+
+        <rect x="24" y="468" width="14" height="14" rx="3" fill="#0891A6"/>
+        <text class="evK" x="48" y="480">88.8% false positives is not a hospital number. It is what a static threshold on an AI metric produces.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - the measured cost of alarm noise, and the one failure mode the analogy does not cover</figcaption>
+    </figure>
+
+    <details class="card" open>
+      <summary><span class="mode live">Live</span>Why 88.8% is the number to quote in your own review<span class="mini">4 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>Drew and colleagues annotated 12,671 arrhythmia alarms and found <strong>88.8% of them were false positives</strong>, with an inter-rater kappa of 0.86 so the labelling itself is defensible. Sit with the shape of that: the monitors were not broken. They were doing exactly what they were configured to do, on real physiological signals, and nearly nine in ten of their conclusions were wrong.</p>
+        <p>A naive static threshold on an AI quality metric produces the same class of result for reasons Part 2 works through, and the reason to reach for a clinical study rather than an engineering anecdote is that nobody in your review can dismiss it as an excuse for laziness. The finding is not "alerts are annoying". The finding is that alarm noise produced deaths and the remedy was a configuration policy.</p>
+        <table class="clean">
+          <tr><th></th><th>ICU monitor</th><th>Your AI service</th></tr>
+          <tr><td><strong>Signal</strong></td><td>Real physiology, correctly measured</td><td>Real latency, cost and quality, correctly measured</td></tr>
+          <tr><td><strong>Why it fires wrongly</strong></td><td>A limit set for a population, applied to one patient</td><td>A threshold set for one mode, applied to a multi-modal metric</td></tr>
+          <tr><td><strong>Documented human response</strong></td><td>Volume to inaudible; limits widened outside safe range</td><td>Channel muted; threshold raised until it stops firing</td></tr>
+          <tr><td><strong>The fix that worked</strong></td><td>A written, reviewed alarm configuration policy per unit</td><td>A written, reviewed alerting policy per surface</td></tr>
+          <tr><td><strong>The extra failure mode</strong></td><td>None of this kind</td><td><strong>Silent failure.</strong> Green because nothing is instrumented</td></tr>
+        </table>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode self">Self-study</span>Where the analogy stops being useful<span class="mini">3 min read</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>Borrowed evidence has to be returned honestly, so state the limits before somebody else does.</p>
+        <ul>
+          <li><strong>A monitor is attached to one patient; your alert watches a population.</strong> Clinical alarms are per-bed and per-person, which is why 187 per bed per day is intolerable. Your alerts are usually aggregate, which makes them quieter and also makes them blind to the intermittent single-user failure the Beacon incident was made of.</li>
+          <li><strong>Their false positives were loud. Yours can be silent.</strong> An unattached lead on a cardiac monitor triggers a leads-off alarm. An uninstrumented retrieval step triggers nothing at all, forever. This is the asymmetry that makes AI on-call harder than the ICU case, not easier, and it is why <strong>instrumentation coverage itself has to be an alertable class</strong>.</li>
+          <li><strong>Nobody dies when your chatbot is wrong, usually.</strong> Say so. The transfer being argued is about the mechanism of human response to noise, not an equivalence of stakes. Overclaiming here costs you the room.</li>
+        </ul>
+      </div>
+    </details>
+  </section>
+
+  <!-- ============ PART 2 ============ -->
+  <section class="section" id="thresholds">
+    <div class="section-kicker">
+      <span class="klabel">Part 2 · the mechanism</span>
+      <h2>Five reasons a static threshold misfires on an AI metric <span class="tag concept">10 min live</span></h2>
+    </div>
+    <p class="lede">Google's SRE workbook already names four generic problems with any threshold alert: precision, recall, detection time and reset time. AI systems add five more that are specific to what you are measuring, and each one is a false-positive factory in its own right.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 380" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Five LLM-specific reasons static thresholds misfire: status codes lie, unit-level noise, multi-modal distributions, moving ground truth, and bursts under quota.">
+        <style>
+          .thT { font: 700 12.5px Inter, sans-serif; fill: #FFFFFF; }
+          .thS { font: 400 11px Inter, sans-serif; fill: #AFC0E4; }
+          .thX { font: 400 11px Inter, sans-serif; fill: #66707E; }
+          .thK { font: 600 12.5px Inter, sans-serif; fill: #08323A; }
+        </style>
+
+        <rect x="24" y="24" width="210" height="52" rx="10" fill="#0C1F3F"/>
+        <text class="thT" x="42" y="46">1 · Status code</text>
+        <text class="thS" x="42" y="64">green 200, empty body</text>
+        <rect x="246" y="24" width="610" height="52" rx="10" fill="#EDF2FB" stroke="#AFC0E4" stroke-width="1.5"/>
+        <text class="thX" x="266" y="46">A green 200 can be an empty response, a refusal, a truncation, or a confident</text>
+        <text class="thX" x="266" y="64">fabrication. Assert on the output. Never on the status code.</text>
+
+        <rect x="24" y="88" width="210" height="52" rx="10" fill="#16305C"/>
+        <text class="thT" x="42" y="110">2 · Unit noise</text>
+        <text class="thS" x="42" y="128">80 outputs, 1 input</text>
+        <rect x="246" y="88" width="610" height="52" rx="10" fill="#EDF2FB" stroke="#AFC0E4" stroke-width="1.5"/>
+        <text class="thX" x="266" y="110">1000 identical prompts at temperature 0 produced 80 distinct completions. Any</text>
+        <text class="thX" x="266" y="128">per-request quality threshold flaps. Quality is a rate over a sample, not one call.</text>
+
+        <rect x="24" y="152" width="210" height="52" rx="10" fill="#3F62A8"/>
+        <text class="thT" x="42" y="174">3 · Multi-modal</text>
+        <text class="thS" x="42" y="192" fill="#EDF2FB">cache hit vs 12 steps</text>
+        <rect x="246" y="152" width="610" height="52" rx="10" fill="#EDF2FB" stroke="#AFC0E4" stroke-width="1.5"/>
+        <text class="thX" x="266" y="174">Cache hit and cache miss are different distributions, and so are a 1-step answer</text>
+        <text class="thX" x="266" y="192">and a 12-step agent run. One p95 either screams or hides a mode. Segment first.</text>
+
+        <rect x="24" y="216" width="210" height="52" rx="10" fill="#3F62A8"/>
+        <text class="thT" x="42" y="238">4 · Moving ground</text>
+        <text class="thS" x="42" y="256" fill="#EDF2FB">no deploy required</text>
+        <rect x="246" y="216" width="610" height="52" rx="10" fill="#EDF2FB" stroke="#AFC0E4" stroke-width="1.5"/>
+        <text class="thX" x="266" y="238">Ground truth moves under you with no change of yours. A newer tokenizer producing</text>
+        <text class="thX" x="266" y="256">about 30% more tokens breaks a token threshold for a reason that is not a bug.</text>
+
+        <rect x="24" y="280" width="210" height="52" rx="10" fill="#0891A6"/>
+        <text class="thT" x="42" y="302">5 · Burst quota</text>
+        <text class="thS" x="42" y="320" fill="#E4F6F9">throttled at low average</text>
+        <rect x="246" y="280" width="610" height="52" rx="10" fill="#E4F6F9" stroke="#0891A6" stroke-width="1.5"/>
+        <text class="thX" x="266" y="302">Token-bucket enforcement means 60 requests a minute can become 1 per second,</text>
+        <text class="thX" x="266" y="320">so a burst fails while your average-utilisation panel shows comfortable headroom.</text>
+
+        <rect x="24" y="350" width="14" height="14" rx="3" fill="#0891A6"/>
+        <text class="thK" x="48" y="362">Each of the five manufactures false positives, and false positives are how you train people to ignore you.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - the five AI-specific false-positive factories, on top of SRE's four generic ones</figcaption>
+    </figure>
+
+    <div class="callout warn">
+      <strong>The one that catches leaders out</strong>
+      Reason 4 is the one that will bite you in a review, because it looks like a bug and it is not. Nothing in your system changed. A provider changed a tokenizer, or moved a floating alias, or altered a default, and your carefully tuned threshold is now wrong in a way no code review would have caught. Any threshold you set against provider behaviour has a shelf life, and the only honest response is to write the review date next to the number when you set it.
+    </div>
+
+    <details class="card">
+      <summary><span class="mode self">Self-study</span>Reason 2, in full, because it is the one people refuse to believe<span class="mini">3 min read</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>A published experiment ran the same prompt at temperature 0 a thousand times against one model. <strong>Those 1000 completions contained 80 unique outputs</strong>, the most common of which appeared 78 times. All 1000 were identical through token 102 and diverged at token 103. The cause is not GPU randomness: the kernels are run-to-run deterministic but not batch-invariant, and server batch size varies with other users' load. In the researchers' framing, the other concurrent users are not an input to the system but a nondeterministic property of it.</p>
+        <p>Two consequences for on-call, both structural:</p>
+        <ul>
+          <li><strong>Any per-request quality gate is a coin flip with extra steps.</strong> If the same input can produce 80 outputs, a threshold that judges one output cannot distinguish a regression from the ordinary spread. Quality alerts have to be a rate over a sample, with the sample size chosen before the alert is written.</li>
+          <li><strong>You cannot reproduce a production trace by replaying it, so you must capture enough of it at the time.</strong> That is the whole argument for tracing over reproduction, and it is why the coverage decision in session a2 is upstream of every alerting decision here.</li>
+        </ul>
+        <p>Worth knowing when someone proposes pinning temperature to zero as a fix: on recent frontier models the sampling parameters have been deprecated and return an error on non-default values, so that lever is not even available.</p>
+      </div>
+    </details>
+  </section>
+
+  <!-- ============ PART 3 ============ -->
+  <section class="section" id="burnrate">
+    <div class="section-kicker">
+      <span class="klabel">Part 3 · the replacement</span>
+      <h2>Three burn-rate rules instead of thirty thresholds <span class="tag concept">12 min live</span></h2>
+    </div>
+    <p class="lede">The alternative to a wall of thresholds is not fewer thresholds. It is a different question. Instead of asking "is this number bad right now", a burn-rate alert asks "at the current rate, how fast are we spending the error budget we agreed to", which is the only version of the question a business can act on.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 465" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Google SRE multi-window burn-rate table for a 99.9 percent SLO, the requirement that both windows exceed threshold, and SRE's arithmetic against simple thresholds.">
+        <style>
+          .brH { font: 700 13px Inter, sans-serif; fill: #1B2230; }
+          .brTH { font: 700 11.5px Inter, sans-serif; fill: #FFFFFF; }
+          .brC { font: 400 11.5px Inter, sans-serif; fill: #1B2230; }
+          .brN { font: 700 11.5px Inter, sans-serif; fill: #16305C; }
+          .brB { font: 700 12px Inter, sans-serif; fill: #FFFFFF; }
+          .brX { font: 400 11px Inter, sans-serif; fill: #66707E; }
+          .brR { font: 400 11px Inter, sans-serif; fill: #991B1B; }
+          .brRB { font: 700 12.5px Inter, sans-serif; fill: #991B1B; }
+          .brK { font: 600 12.5px Inter, sans-serif; fill: #08323A; }
+        </style>
+
+        <text class="brH" x="24" y="36">Google SRE multi-window burn-rate alerts for a 99.9% SLO</text>
+
+        <rect x="24" y="52" width="832" height="30" rx="8" fill="#16305C"/>
+        <text class="brTH" x="40" y="72">Severity</text>
+        <text class="brTH" x="170" y="72">Long window</text>
+        <text class="brTH" x="340" y="72">Short window</text>
+        <text class="brTH" x="510" y="72">Burn rate</text>
+        <text class="brTH" x="660" y="72">Budget consumed</text>
+
+        <rect x="24" y="82" width="832" height="34" fill="#EDF2FB" stroke="#C7CFDA" stroke-width="1"/>
+        <text class="brC" x="40" y="104">Page</text>
+        <text class="brC" x="170" y="104">1 hour</text>
+        <text class="brC" x="340" y="104">5 minutes</text>
+        <text class="brN" x="510" y="104">14.4</text>
+        <text class="brC" x="660" y="104">2% of the monthly budget</text>
+
+        <rect x="24" y="116" width="832" height="34" fill="#FFFFFF" stroke="#C7CFDA" stroke-width="1"/>
+        <text class="brC" x="40" y="138">Page</text>
+        <text class="brC" x="170" y="138">6 hours</text>
+        <text class="brC" x="340" y="138">30 minutes</text>
+        <text class="brN" x="510" y="138">6</text>
+        <text class="brC" x="660" y="138">5% of the monthly budget</text>
+
+        <rect x="24" y="150" width="832" height="34" fill="#EDF2FB" stroke="#C7CFDA" stroke-width="1"/>
+        <text class="brC" x="40" y="172">Ticket</text>
+        <text class="brC" x="170" y="172">3 days</text>
+        <text class="brC" x="340" y="172">6 hours</text>
+        <text class="brN" x="510" y="172">1</text>
+        <text class="brC" x="660" y="172">10% of the monthly budget</text>
+
+        <text class="brH" x="24" y="210">Both windows must exceed the threshold before anyone is woken</text>
+
+        <rect x="24" y="220" width="240" height="40" rx="8" fill="#3F62A8"/>
+        <text class="brB" x="42" y="245">Long window over threshold</text>
+
+        <rect x="24" y="272" width="240" height="40" rx="8" fill="#3F62A8"/>
+        <text class="brB" x="42" y="297">Short window over threshold</text>
+
+        <path d="M264 240 H286 V266 H296" fill="none" stroke="#66707E" stroke-width="1.5"/>
+        <path d="M264 292 H286 V266" fill="none" stroke="#66707E" stroke-width="1.5"/>
+        <rect x="300" y="246" width="64" height="40" rx="8" fill="#0891A6"/>
+        <text class="brB" x="317" y="271">AND</text>
+        <path d="M364 266 H394" fill="none" stroke="#66707E" stroke-width="1.5"/>
+        <path d="M394 262 L402 266 L394 270 Z" fill="#66707E"/>
+        <rect x="404" y="246" width="180" height="40" rx="8" fill="#0C1F3F"/>
+        <text class="brB" x="422" y="271">Interrupt a human</text>
+
+        <rect x="620" y="220" width="236" height="92" rx="10" fill="#EDF2FB" stroke="#AFC0E4" stroke-width="1.5"/>
+        <text class="brX" x="638" y="242">The long window buys you</text>
+        <text class="brX" x="638" y="258">precision. The short window</text>
+        <text class="brX" x="638" y="274">buys a fast reset: the page</text>
+        <text class="brX" x="638" y="290">clears when the burn stops,</text>
+        <text class="brX" x="638" y="306">not an hour afterwards.</text>
+
+        <rect x="24" y="330" width="832" height="86" rx="10" fill="#FEF2F2" stroke="#FCA5A5" stroke-width="1.5"/>
+        <text class="brRB" x="44" y="352">What a simple threshold does instead, in SRE's own arithmetic</text>
+        <text class="brR" x="44" y="372">A 0.1% error rate lasting 10 minutes consumes 0.02% of a monthly budget and still pages you. Meanwhile</text>
+        <text class="brR" x="44" y="388">"a series of 100% error spikes lasting 5 minutes every 10 minutes never triggers an alert, despite</text>
+        <text class="brR" x="44" y="404">consuming 35% of the error budget." Wrong on both sides at once, from one static number.</text>
+
+        <rect x="24" y="434" width="14" height="14" rx="3" fill="#0891A6"/>
+        <text class="brK" x="48" y="446">Three rules with a shared definition of "bad" beat thirty numbers nobody remembers agreeing to.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - the burn-rate table, the AND gate that fixes reset time, and what a static number gets wrong</figcaption>
+    </figure>
+
+    <details class="card" open>
+      <summary><span class="mode live">Live</span>What to alert on when success is not a status code<span class="mini">6 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>Burn rate tells you how to alert. This is what to point it at. Two of these rows are the ones almost nobody has, and they are the two this course exists for.</p>
+        <table class="clean">
+          <tr><th>Signal</th><th>Why it earns a page or a ticket</th><th>Route</th></tr>
+          <tr><td><strong>Task success rate</strong></td><td>Assertion-verified on the output, not the HTTP status. This is the SLI everything else supports</td><td>Page</td></tr>
+          <tr><td><strong>Error rate, with 429 split out</strong></td><td>Throttling and breakage need different humans and different fixes. Mixed together, both get diagnosed wrongly</td><td>Page</td></tr>
+          <tr><td><strong>p95 first-token and p95 total, separately</strong></td><td>They move for different reasons. One number for both hides which half is broken</td><td>Page</td></tr>
+          <tr><td><strong>Refusal rate</strong></td><td>A refusal returns as a normal 200 response with a refusal stop reason. <strong>Invisible to error-rate alerting</strong>, and a refusal spike is a product outage</td><td>Page</td></tr>
+          <tr><td><strong>Cost per hour and cost per successful task</strong></td><td>Session a4's denominator. A runaway loop shows here before it shows anywhere else</td><td>Page on rate, ticket on ratio</td></tr>
+          <tr><td><strong>Truncation rate</strong></td><td>Both max-token stops and context-window-exceeded stops count as truncated. A truncated answer looks successful</td><td>Ticket</td></tr>
+          <tr><td><strong>Step and tool-call count distribution</strong></td><td>A runaway loop is visible as shape, without opening a trace. The spec's own histogram buckets run to 128 for exactly this</td><td>Page above p99</td></tr>
+          <tr><td><strong>Cache hit rate, step-change detection</strong></td><td>A sudden drop means a cache-invalidating change shipped. It is a cost alert that fires the day of the deploy, not on the invoice</td><td>Ticket</td></tr>
+          <tr><td><strong>Guardrail trip rate</strong></td><td>Both directions matter. A spike is abuse or a prompt regression; a collapse to zero usually means the guardrail stopped running</td><td>Ticket</td></tr>
+          <tr><td><strong>Eval-score drift on sampled traffic</strong></td><td>Small noisy sample scored by a judge whose own drift you have not measured. Real signal, wrong instrument for waking people</td><td><strong>Ticket, never page</strong></td></tr>
+          <tr><td><strong>Instrumentation coverage</strong></td><td>Traces missing an expected span type. <strong>The alert that catches the silent failure</strong>, because a step nobody instruments cannot look slow, empty or failed</td><td>Ticket</td></tr>
+          <tr><td><strong>Response model versus requested model</strong></td><td>Catches silent alias movement. Your request said one thing, the provider served another, and no other signal shows it</td><td>Ticket</td></tr>
+        </table>
+        <p>Note what the routing column is doing. Half of these are deliberately tickets. A leader's contribution to on-call health is mostly the discipline of deciding, in advance and in writing, which signals are allowed to wake somebody.</p>
+      </div>
+    </details>
+
+    <div class="callout tip">
+      <strong>The two alerts your current setup almost certainly lacks</strong>
+      <strong>Refusal rate</strong> and <strong>instrumentation coverage</strong>. The first is invisible because it arrives as a successful response. The second is invisible because it is the absence of data rather than bad data, and nothing in a conventional monitoring stack is built to notice an absence. Both of them are the silent failure mode that the ICU analogy does not cover, and both are cheap to add.
+    </div>
+  </section>
+
+  <!-- ============ DECISION 1 ============ -->
+  <section class="section" id="decision-1">
+    <div class="section-kicker">
+      <span class="klabel">Decision 1 of 2</span>
+      <h2>Audit your own channel against the ICU numbers <span class="tag exercise">◐ 10 min · in pairs</span></h2>
+    </div>
+    <p class="lede">This exercise has one rule: no proposals until the count is on the table. Teams argue about alert quality for months without ever writing down how many alerts fired last week, and the count usually ends the argument by itself.</p>
+
+    <div class="steps">
+      <div class="step"><p>Pull the last seven days from your busiest alerting channel and write two numbers on the board: <strong>how many fired</strong>, and <strong>how many were followed by a human action other than acknowledging or muting</strong>. The second number divided by the first is your precision. Compare it to 11.2%, which is what the ICU arrhythmia monitors managed.</p></div>
+      <div class="step"><p>For every alert that fired more than three times, ask which of Part 2's five reasons explains it. Most will be reason 3, a single threshold across a legitimately multi-modal distribution. Naming the reason turns "this alert is noisy" into a specific fix.</p></div>
+      <div class="step"><p>Ask the on-call rota directly: <strong>which alerts have you muted, filtered or stopped reading?</strong> Ask it as a design question rather than a compliance question, because the honest answer is the most valuable data in the room and you will only get it once.</p></div>
+      <div class="step"><p>Now the uncomfortable half. List the last three incidents your users reported before your monitoring did. For each one, name the signal that would have caught it and whether that signal exists at all. Absences do not appear in an alert audit, which is why they need their own pass.</p></div>
+    </div>
+
+    <div class="prompt-box good">
+      <span class="label">★ The output that makes this real</span>
+      <p>One page, two columns. Left column: alerts to delete or downgrade to a ticket, with the reason number from Part 2 next to each. Right column: signals that do not exist yet, with refusal rate and instrumentation coverage almost certainly on it. Both columns need an owner and a date, or you will run this same exercise again next quarter with the same numbers.</p>
+    </div>
+  </section>
+
+  <!-- ============ DECISION 2 ============ -->
+  <section class="section" id="decision-2">
+    <div class="section-kicker">
+      <span class="klabel">Decision 2 of 2</span>
+      <h2>Write the alerting configuration policy <span class="tag exercise">◐ 12 min · whole group</span></h2>
+    </div>
+    <p class="lede">ECRI's 2015 finding was not that hospitals needed better monitors. It was that they needed alarm configuration policies, reviewed for completeness and clinical relevance. Copy that shape exactly. One page per surface, reviewed on a date, owned by a person.</p>
+
+    <div class="steps">
+      <div class="step"><p><strong>Name the surface and its SLO.</strong> One policy per surface, not one for the company. "The assistant's answer endpoint, 99.9% task success measured by output assertion" is a policy scope. "AI" is not.</p></div>
+      <div class="step"><p><strong>Set the burn-rate rules, not thresholds.</strong> Take the three rows from Part 3 as written: page at 14.4 over 1 hour and 5 minutes, page at 6 over 6 hours and 30 minutes, ticket at 1 over 3 days and 6 hours. Both windows must exceed before anything fires. Resist the urge to invent your own numbers on day one.</p></div>
+      <div class="step"><p><strong>Declare the page list, and declare it short.</strong> Everything not on that list is a ticket by default. Write down that default explicitly, because the absence of a stated default is how a channel accumulates thirty alerts nobody agreed to.</p></div>
+      <div class="step"><p><strong>Segment before you threshold.</strong> For every latency or cost signal, state which dimension it is segmented by: cache hit against miss, single-step against multi-step, tenant tier. Reason 3 is the most common cause of noise and segmentation is its whole cure.</p></div>
+      <div class="step"><p><strong>Put a review date on every number.</strong> Provider-side change moves your baseline without a deploy of yours, so a threshold with no review date is a threshold that will be wrong and unowned. Quarterly is enough.</p></div>
+      <div class="step"><p><strong>Give someone the authority to delete an alert.</strong> This is the clause the policy usually lacks and the reason noise only ever accumulates. Adding an alert is a five-minute change anyone can make; deleting one feels like accepting risk, so nobody does it without cover. Provide the cover in writing.</p></div>
+    </div>
+
+    <div class="callout example">
+      <span class="ex-pill">The sentence to steal from clinical engineering</span>
+      <p>ECRI's remedy was an alarm configuration policy "assessed for completeness and clinical relevance". Your version reads: assessed for completeness, meaning every failure mode in our taxonomy maps to a signal, and for operational relevance, meaning every page maps to an action a woken human can actually take at 3am. If a signal fails the second test, it is a ticket. If it fails the first, it is a gap and it gets an owner.</p>
+    </div>
+  </section>
+
+  <!-- ============ HOMEWORK ============ -->
+  <section class="section" id="exercise">
+    <div class="section-kicker">
+      <span class="klabel">Homework</span>
+      <h2>Try it yourself - this week <span class="tag exercise">◐ 45-60 min total</span></h2>
+    </div>
+    <ul>
+      <li>Compute your channel's precision for one week: alerts that produced a human action, divided by alerts that fired. Write the percentage in the policy document as the baseline you are trying to move. It is the only number in this session that is about your organisation rather than somebody else's.</li>
+      <li>Add refusal rate as a tracked signal, segmented by feature. It arrives as a successful response, so no error-rate alert will ever show it to you, and a refusal spike after a prompt change is one of the most common silent product outages in this class of system.</li>
+      <li>Write the instrumentation coverage alert: what proportion of traces on your main path contain every span type you expect. Then look at today's value before you set a threshold, because for most teams the first reading is the finding.</li>
+      <li>Convert exactly one existing threshold alert to a burn-rate rule and leave both running for two weeks in parallel. Count how often each fires and how often each was right. One head-to-head comparison persuades a sceptical on-call rota better than the whole ICU dataset.</li>
+      <li>Take your loudest alert to whoever owns the rota and ask what they would need in order to agree to delete it. The answer is usually a replacement signal rather than reassurance, and that answer is your next ticket.</li>
+    </ul>
+  </section>
+
+  <!-- ============ SOURCES ============ -->
+  <section class="section" id="official">
+    <div class="section-kicker">
+      <span class="klabel">Source material</span>
+      <h2>Official sources covered</h2>
+    </div>
+    <p class="lede">Every quotation and number on this page traces to a primary source catalogued in this course's source map, and the clinical evidence is quoted rather than summarised so you can carry it into your own review unaltered. This page covers:</p>
+    <div class="covered">
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">ECRI Institute, Top 10 Health Technology Hazards - alarm hazards ranked #1 in 2013 and again in 2015, with the 2013 causal chain quoted verbatim</span><span class="note">Part 1 · primary [P] · the 2015 edition narrows the hazard to inadequate alarm configuration policies</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Drew et al., PLOS ONE 2014 - 31 days, 5 adult ICUs, 77 beds, 461 patients, 2,558,760 unique alarms, 187 audible per bed per day, 88.8% of 12,671 arrhythmia alarms false positive</span><span class="note">Part 1 · primary [P] · inter-rater kappa 0.86</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Google SRE workbook, multi-window multi-burn-rate alerting - the 99.9% SLO table and the arithmetic against simple thresholds</span><span class="note">Part 3 · primary [P] · 14.4 / 6 / 1 with both windows required</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Refusals return as HTTP 200 with a refusal stop reason, so they are invisible to error-rate alerting</span><span class="note">Part 3 · primary [P] · the same applies to empty responses ending normally</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Run-to-run non-determinism: 1000 completions at temperature 0 produced 80 unique outputs, diverging at token 103, from batch non-invariance rather than GPU randomness</span><span class="note">Part 2 · primary [P] · why quality is a rate over a sample</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Token-bucket rate limiting: 60 requests per minute may be enforced as 1 per second, so bursts fail while average utilisation looks healthy</span><span class="note">Part 2 · primary [P] · alert on remaining quota trending to zero, not on the 429</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Agent step-count and tool-call-count histograms with buckets running to 128, as the runaway-loop signal</span><span class="note">Part 3 · primary [P] · exact metric names and buckets are builder session b8</span></div>
+      <div class="covered-row"><span class="status pill light">◐</span><span class="name">The newer tokenizer producing roughly 30% more tokens for the same text</span><span class="note">Named here as moving ground truth · the cost arithmetic is leader session a4</span></div>
+      <div class="covered-row"><span class="status pill light">◐</span><span class="name">Prevailing guidance of scoring 1-10% of production traces asynchronously</span><span class="note">Secondary [S] · vendor documentation only. No peer-reviewed evidence for any specific cadence, which is why eval drift is a ticket here</span></div>
+      <div class="covered-row"><span class="status pill light">◐</span><span class="name">SLO definition, error budgets and the six-gate launch decision</span><span class="note">Not covered by design · assumed from Learn Agent Launch</span></div>
+    </div>
+  </section>
+
+  <!-- ============ QUIZ ============ -->
+  <section class="section" id="quiz">
+    <div class="section-kicker">
+      <span class="klabel">Check yourself</span>
+      <h2>Three questions before you go 🎯 <span class="tag exercise">◐ 90 seconds</span></h2>
+    </div>
+    <div class="quiz-q" data-answer="1">
+      <p class="qtext">1 · The ICU study found 88.8% of annotated arrhythmia alarms were false positives. What is the transferable finding for your team?</p>
+      <button class="qopt" type="button">A · That physiological monitoring is harder than software monitoring, so the comparison does not hold</button>
+      <button class="qopt" type="button">B · That correctly working monitors on real signals still produce mostly wrong conclusions when limits are set for a population rather than a case, and the documented human response is to silence the channel and widen the limits</button>
+      <button class="qopt" type="button">C · That alert volume should be capped at a fixed number per shift</button>
+      <p class="qwhy">The monitors were not faulty. They measured real physiology and reported it against limits, and nearly nine in ten conclusions were still wrong. That is precisely what a static threshold does to a multi-modal, non-deterministic AI metric. The part to carry into your own review is not the percentage but the response it produced: volume turned to inaudible, limits pushed outside the safe range. Engineers mute channels and raise thresholds for exactly the same reason, and they are being rational both times.</p>
+    </div>
+    <div class="quiz-q" data-answer="2">
+      <p class="qtext">2 · Why must a burn-rate alert require both the long and the short window to exceed threshold?</p>
+      <button class="qopt" type="button">A · Redundancy, in case one window's data is missing</button>
+      <button class="qopt" type="button">B · To make the alert harder to trigger, which reduces volume</button>
+      <button class="qopt" type="button">C · The long window buys precision, and the short window buys reset time so the page clears when the burn actually stops rather than lingering for the length of the long window</button>
+      <p class="qwhy">Reset time is one of the four generic threshold problems and it is the one people forget. With only a long window, an incident that ended twenty minutes ago keeps paging because the hour-long average is still elevated, and an alert that fires after the problem is fixed teaches people that alerts are unreliable. The short window is what lets the alert stand down honestly. Both windows together also solve the two failures in SRE's own arithmetic: a trivial 0.1% blip that pages, and repeated 100% spikes that consume 35% of the budget without ever firing.</p>
+    </div>
+    <div class="quiz-q" data-answer="0">
+      <p class="qtext">3 · Your error rate is flat, latency is normal, and cost per hour is unchanged. Which two AI failures can your monitoring still not see?</p>
+      <button class="qopt" type="button">A · A refusal spike, because refusals return as successful 200 responses, and a coverage gap, because an uninstrumented step produces the absence of data rather than bad data</button>
+      <button class="qopt" type="button">B · Nothing significant, since those three signals cover availability, performance and cost</button>
+      <button class="qopt" type="button">C · Only cost regressions, which need a separate billing alert</button>
+      <p class="qwhy">This is where the hospital analogy runs out. An unattached cardiac lead sets off a leads-off alarm; an uninstrumented retrieval step sets off nothing, ever. Refusals and empty responses arrive with a success status, so no error-rate alert will ever mention them, and a coverage gap is an absence that conventional monitoring is not built to notice. Those two are the silent failure mode, they are the mechanism behind the Beacon incident, and they are both cheap to add once somebody decides they are alertable classes.</p>
+    </div>
+    <p class="quiz-score"></p>
+  </section>
+
+  <!-- ============ CHEAT SHEET ============ -->
+  <section class="cheat" id="cheatsheet">
+    <h3>Leader session 5 cheat sheet <span>· pin this</span></h3>
+    <div class="grid-2">
+      <div class="cheat-item"><b>The evidence, in one line</b><span>ECRI ranked alarm hazards #1 in 2013 and 2015. Drew et al. found 187 audible alarms per bed per day and 88.8% false positives on arrhythmia alarms.</span></div>
+      <div class="cheat-item"><b>The documented human response</b><span>Volume turned to inaudible. Limits widened outside the safe range. Ineffective responses. Your team does the same thing to a noisy channel.</span></div>
+      <div class="cheat-item"><b>The limit of the analogy</b><span>LLM systems add the silent failure: a monitor reading normal because nobody attached the lead. Hospital alarms do not have that mode.</span></div>
+      <div class="cheat-item"><b>Five reasons thresholds misfire</b><span>Status codes lie. Unit-level noise. Legitimately multi-modal latency and cost. Ground truth moves with no deploy. Bursts throttle under quota.</span></div>
+      <div class="cheat-item"><b>Burn rate for a 99.9% SLO</b><span>Page at 14.4 over 1h and 5min. Page at 6 over 6h and 30min. Ticket at 1 over 3d and 6h. Both windows must exceed.</span></div>
+      <div class="cheat-item"><b>The two missing alerts</b><span>Refusal rate, invisible because it is a 200. Instrumentation coverage, invisible because it is an absence.</span></div>
+      <div class="cheat-item"><b>Segment before you threshold</b><span>Cache hit against miss. One step against twelve. One p95 across both modes either screams or hides a mode.</span></div>
+      <div class="cheat-item"><b>ECRI's fix is your fix</b><span>A written, reviewed alerting configuration policy per surface, with a review date on every number and somebody empowered to delete an alert.</span></div>
+    </div>
+  </section>
+
+  <footer class="pagefoot">
+    <span>Leader session 5 of 6 · learn-ai-observability-with-phoebe · by Phoebe Fu &nbsp;·&nbsp; 📚 <a href="https://phoebefu6.github.io/learn-with-phoebe/">Learn with Phoebe ↗</a></span>
+    <span><a href="../index.html">← Course home</a> &nbsp;·&nbsp; <a href="a6-buy-build-or-otel.html">Next: Buy, build, or stay OTel-native →</a></span>
+  </footer>
+
+</main>
+
+<script src="../assets/app.js?v=2"></script>
+</body>
+</html>

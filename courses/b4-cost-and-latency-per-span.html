@@ -1,0 +1,574 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Builder session 4 · Cost and latency per span - learn ai observability with phoebe</title>
+<link rel="stylesheet" href="../assets/style.css?v=2">
+</head>
+<body>
+
+<div class="toolbar">
+  <div class="wrap">
+    <span class="crumb"><a href="../index.html">learn-ai-observability-with-phoebe</a> / Builder session 4 of 10</span>
+    <button class="btn" id="toggle-all" type="button">Expand all</button>
+    <button class="btn primary" id="zoom-toggle" type="button">Projector zoom: off</button>
+  </div>
+</div>
+
+<header class="masthead">
+  <div class="wrap">
+    <div class="eyebrow">Learn AI Observability with Phoebe · Builder track · Session 4 of 10</div>
+    <h1>Cost and latency per span: <span class="accent">attribution that survives an agent loop</span></h1>
+    <p class="sub">Session b3 gave your agent a span tree. That tree now carries the same tokens at two different depths, which means the obvious way to add up cost is wrong by exactly a factor of two. This session fixes the arithmetic: one depth only, the four token counters you must log rather than one, and the two derived latency quantities that tell you whether a faster model would help before you spend a month migrating to one.</p>
+    <div class="chip-row">
+      <span class="chip level">🟡 Builder track</span>
+      <span class="chip audience">AI engineers · platform engineers · technical PMs</span>
+      <span class="chip time">45 min</span>
+    </div>
+    <div class="agenda">
+      <span class="a1" style="flex:1">0-3 · Welcome</span>
+      <span class="a2" style="flex:4">3-20 · The double count and the quartet</span>
+      <span class="a3" style="flex:5">20-40 · Build-along: attribute one run</span>
+      <span class="a4" style="flex:1">40-45 · Q&amp;A</span>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <!-- ============ INTRO ============ -->
+  <section class="section" id="intro">
+    <div class="section-kicker">
+      <span class="klabel">Part 0</span>
+      <h2>Why cost and latency belong on the span, not on a bill</h2>
+    </div>
+    <p class="lede">Your provider invoice is a single true number that answers no question you actually have. It cannot tell you which tenant, which feature or which failing retry spent the money, and it cannot tell you whether last Tuesday's slow hour was decode time or a tool backend. Everything useful about cost and latency is a <em>per-span</em> fact, and this session is about getting those facts right - because the two most natural ways to compute them are both wrong, in opposite directions.</p>
+    <div class="legend">
+      <span class="pill solid">Live - presented in session</span>
+      <span class="pill light">Self-study - read after class</span>
+      <span class="pill inkpill">Official sources covered</span>
+    </div>
+    <div class="callout win">
+      <strong>★ What you walk out with today</strong>
+      The sum-at-one-depth rule that stops your cost dashboard reporting double, the four token counters you have to log before a cache hit rate exists at all, the reason a 200,000-token request can honestly report <code>input_tokens: 50</code>, two latency definitions that need separate SLOs, and two derived quantities - <code>model_time_fraction</code> and <code>orchestration_overhead</code> - that between them decide whether your next optimisation is a model swap, a prompt edit or a missing span.
+    </div>
+    <div class="callout tip">
+      <strong>Every price on this page carries a date: 2026-08-13</strong>
+      Multipliers, per-search fees and per-million rates were read on 2026-08-13 and are provided so the arithmetic is checkable, not because they will still be true when you teach this. The pricing page this course reads from carries its own footnote recording that a previously announced increase was cancelled, which is the cleanest possible argument for dating every number you quote. Substitute your own rates before you present any dollar figure to anyone who might act on it.
+    </div>
+  </section>
+
+  <!-- ============ PART 1 ============ -->
+  <section class="section" id="double-count">
+    <div class="section-kicker">
+      <span class="klabel">Part 1 · the trap b3 set</span>
+      <h2>The same tokens, counted at two depths <span class="tag concept">6 min live</span></h2>
+    </div>
+    <p class="lede">The agent conventions ask <code>invoke_agent</code> to carry aggregate <code>gen_ai.usage.*</code> for the whole run, and they ask each child <code>chat</code> span to carry its own. Both are correct and both describe the same tokens. Nothing in the data warns you about this, so the first cost query anybody writes - sum the usage attribute across all spans in the trace - returns exactly twice the truth.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 460" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="An agent span carries aggregate token usage and its two chat children carry their own. Summing every span double counts; summing the leaves or reading the root alone are both correct.">
+        <style>
+          .dcH { font: 700 13px Inter, sans-serif; fill: #1B2230; }
+          .dcM { font: 400 11px ui-monospace, Menlo, monospace; fill: #FFFFFF; }
+          .dcS { font: 400 11px ui-monospace, Menlo, monospace; fill: #AFC0E4; }
+          .dcL { font: 700 12.5px Inter, sans-serif; fill: #FFFFFF; }
+          .dcX { font: 400 11px Inter, sans-serif; fill: #66707E; }
+          .dcR { font: 400 11px Inter, sans-serif; fill: #991B1B; }
+          .dcK { font: 600 12.5px Inter, sans-serif; fill: #08323A; }
+        </style>
+
+        <text class="dcH" x="24" y="30">One agent run, one set of tokens, three ways to add them up</text>
+
+        <rect x="24" y="44" width="832" height="44" rx="10" fill="#0C1F3F"/>
+        <text class="dcM" x="44" y="64">invoke_agent Insight Bot   6.80s   AGENT</text>
+        <text class="dcS" x="44" y="80">gen_ai.usage.input_tokens=3760   gen_ai.usage.output_tokens=450   aggregate</text>
+
+        <rect x="48" y="96" width="808" height="44" rx="9" fill="#16305C"/>
+        <text class="dcM" x="68" y="116">chat claude-sonnet-4-5 (plan)   1.10s</text>
+        <text class="dcS" x="68" y="132">gen_ai.usage.input_tokens=820   gen_ai.usage.output_tokens=140</text>
+
+        <rect x="48" y="148" width="808" height="44" rx="9" fill="#16305C"/>
+        <text class="dcM" x="68" y="168">chat claude-sonnet-4-5 (answer)   1.10s</text>
+        <text class="dcS" x="68" y="184">gen_ai.usage.input_tokens=2940   gen_ai.usage.output_tokens=310</text>
+
+        <rect x="24" y="208" width="210" height="52" rx="10" fill="#FEF2F2" stroke="#FCA5A5" stroke-width="1.5"/>
+        <text class="dcR" x="42" y="240" style="font-weight:700">Sum every span</text>
+        <rect x="248" y="208" width="608" height="52" rx="10" fill="#FEF2F2" stroke="#FCA5A5" stroke-width="1.5"/>
+        <text class="dcR" x="268" y="230">7,520 input + 900 output = $0.0361 per run. Exactly twice the truth, because</text>
+        <text class="dcR" x="268" y="248">the root aggregate and the two children are one set of tokens at two depths.</text>
+
+        <rect x="24" y="268" width="210" height="52" rx="10" fill="#16305C"/>
+        <text class="dcL" x="42" y="300">Sum the leaves</text>
+        <rect x="248" y="268" width="608" height="52" rx="10" fill="#EDF2FB" stroke="#AFC0E4" stroke-width="1.5"/>
+        <text class="dcX" x="268" y="290">3,760 input + 450 output = $0.0180 per run. Correct, and it still holds when</text>
+        <text class="dcX" x="268" y="308">the agent adds a third call, because you never trust the parent's aggregate.</text>
+
+        <rect x="24" y="328" width="210" height="52" rx="10" fill="#0891A6"/>
+        <text class="dcL" x="42" y="360">Read the root</text>
+        <rect x="248" y="328" width="608" height="52" rx="10" fill="#E4F6F9" stroke="#0891A6" stroke-width="1.5"/>
+        <text class="dcX" x="268" y="350">3,760 input + 450 output = $0.0180 per run. Also correct, and cheaper to</text>
+        <text class="dcX" x="268" y="368">query - but only while every model call sits inside one agent span.</text>
+
+        <rect x="24" y="396" width="832" height="44" rx="10" fill="#FFFFFF" stroke="#C7CFDA" stroke-width="1.5"/>
+        <rect x="42" y="410" width="14" height="14" rx="3" fill="#0891A6"/>
+        <text class="dcK" x="66" y="422">Pick one depth, write it down, never mix. Two depths is a 2x error in your cost model.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - the double count, and the two queries that avoid it. Dollar figures use this course's modelled rates of $3.00 per million input and $15.00 per million output, read 2026-08-13</figcaption>
+    </figure>
+
+    <p>Both correct answers have a failure mode, and choosing between them is a real decision rather than a preference. <strong>Leaf-only</strong> is robust to a framework that forgets to aggregate, and it is the version that keeps working when a new tool or a nested sub-agent appears - but it depends on you having instrumented every model call, including any that a third-party library makes on your behalf. <strong>Root-only</strong> is a single cheap read per trace and it is the version your finance queries will want, but it silently under-counts the moment a model call happens outside an instrumented agent span, which is exactly what happens the first week somebody adds a background summariser.</p>
+
+    <div class="prompt-box good">
+      <span class="label">★ Sum at one depth, and say which depth in a comment</span>
+      <p># leaf-only: robust to a missing aggregate, needs full model-call coverage
+leaf_in  = sum(s.attr["gen_ai.usage.input_tokens"]  for s in spans if s.op == "chat")
+leaf_out = sum(s.attr["gen_ai.usage.output_tokens"] for s in spans if s.op == "chat")
+
+# root-only: one read, but it trusts the agent span to enclose every call
+root_in  = root.attr["gen_ai.usage.input_tokens"]
+
+assert leaf_in == root_in, "coverage gap or a double-counted aggregate"</p>
+    </div>
+
+    <div class="callout tip">
+      <strong>Turn the choice into a test</strong>
+      Run both queries and assert they agree. When they disagree you have learned something specific for free: leaf higher than root means the framework's aggregate is stale or partial, root higher than leaf means model calls are happening outside your instrumented spans. Either way it is a coverage bug with a name, discovered by arithmetic rather than by an invoice.
+    </div>
+
+    <details class="card">
+      <summary><span class="mode self">Self-study</span>Two more places the additivity assumption quietly breaks<span class="mini">3 min read</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <ul>
+          <li><strong>Parallel tool calls.</strong> Durations do not add when spans overlap. Two tool spans of 2s each running concurrently under a 2.1s parent are not 4 seconds of anything - the parent is right and your <code>SUM(duration)</code> is meaningless. Any latency figure you compute from a trace has to know whether siblings are sequential or concurrent, which means reading start timestamps and not just durations.</li>
+          <li><strong>Retries inside one span.</strong> The conventions put the whole logical operation, including automatic retries, in a single span. That is good for readability and it means a span's duration can contain two or three attempts, and its token counts should be the <em>billed</em> total across them. So a slow span is not necessarily a slow model - it may be a retried model. If you want to tell those apart you have to emit a retry-attempt count yourself, because nothing in the data model will do it for you.</li>
+          <li><strong>Operations that must not report tokens.</strong> The conventions specifically tell instrumentations not to report token usage on <code>fetch_response</code> operations. Sum blindly over every span with a usage attribute and you will eventually pick up something that was never meant to carry one.</li>
+        </ul>
+      </div>
+    </details>
+  </section>
+
+  <!-- ============ PART 2 ============ -->
+  <section class="section" id="quartet">
+    <div class="section-kicker">
+      <span class="klabel">Part 2 · the quartet</span>
+      <h2>Four counters, because one of them lies <span class="tag concept">7 min live</span></h2>
+    </div>
+    <p class="lede">Prompt caching changes what the word "input" means, and it changes it silently. On a cached request the field named <code>input_tokens</code> counts only the tokens that arrived <em>after</em> the last cache breakpoint. Nothing errors, nothing warns, and the number is genuinely correct for what it measures. It is simply not the number your cost dashboard thinks it is reading.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 506" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="A request with a 200,000-token cached prefix and a 50-token question reports input_tokens of 50. The four counters to log are input, cache read, cache creation and output tokens.">
+        <style>
+          .qtH { font: 700 13px Inter, sans-serif; fill: #1B2230; }
+          .qtM { font: 400 11px ui-monospace, Menlo, monospace; fill: #16305C; }
+          .qtC { font: 400 11px ui-monospace, Menlo, monospace; fill: #08323A; }
+          .qtW { font: 400 11px ui-monospace, Menlo, monospace; fill: #FFFFFF; }
+          .qtX { font: 400 11px Inter, sans-serif; fill: #66707E; }
+          .qtI { font: 400 11px Inter, sans-serif; fill: #08323A; }
+          .qtR { font: 400 11px Inter, sans-serif; fill: #991B1B; }
+          .qtK { font: 600 12.5px Inter, sans-serif; fill: #08323A; }
+        </style>
+
+        <text class="qtH" x="24" y="30">One request: a 200,000-token cached document plus a 50-token question</text>
+
+        <text class="qtR" x="660" y="48" text-anchor="middle">last cache breakpoint</text>
+        <rect x="24" y="62" width="624" height="42" rx="9" fill="#E4F6F9" stroke="#0891A6" stroke-width="1.5"/>
+        <text class="qtI" x="44" y="80">cached prefix - the 200,000-token document</text>
+        <text class="qtX" x="44" y="96">read at 0.1x of base input</text>
+        <line x1="660" y1="56" x2="660" y2="114" stroke="#991B1B" stroke-width="1.5" stroke-dasharray="4 3"/>
+        <rect x="672" y="62" width="72" height="42" rx="9" fill="#16305C"/>
+        <text class="qtW" x="690" y="87">50 tok</text>
+        <text class="qtX" x="756" y="87">the question</text>
+
+        <text class="qtH" x="24" y="142">The quartet, and what each counter is actually counting</text>
+
+        <rect x="24" y="156" width="404" height="68" rx="10" fill="#FEF2F2" stroke="#FCA5A5" stroke-width="1.5"/>
+        <text class="qtM" x="42" y="178" fill="#991B1B">gen_ai.usage.input_tokens = 50</text>
+        <text class="qtR" x="42" y="196">Only the tokens after the last breakpoint. This</text>
+        <text class="qtR" x="42" y="214">is the number a naive dashboard reads.</text>
+
+        <rect x="452" y="156" width="404" height="68" rx="10" fill="#E4F6F9" stroke="#0891A6" stroke-width="1.5"/>
+        <text class="qtC" x="470" y="178">gen_ai.usage.cache_read.input_tokens = 200000</text>
+        <text class="qtI" x="470" y="196">Billed at 0.1x. The document you really sent,</text>
+        <text class="qtI" x="470" y="214">and half of any cache hit rate you compute.</text>
+
+        <rect x="24" y="234" width="404" height="68" rx="10" fill="#EDF2FB" stroke="#AFC0E4" stroke-width="1.5"/>
+        <text class="qtM" x="42" y="256">gen_ai.usage.cache_creation.input_tokens = 0</text>
+        <text class="qtX" x="42" y="274">1.25x to write for 5 minutes, 2x for an hour.</text>
+        <text class="qtX" x="42" y="292">The other half of the hit rate. Zero means a hit.</text>
+
+        <rect x="452" y="234" width="404" height="68" rx="10" fill="#EDF2FB" stroke="#AFC0E4" stroke-width="1.5"/>
+        <text class="qtM" x="470" y="256">gen_ai.usage.output_tokens = 180</text>
+        <text class="qtX" x="470" y="274">Plus gen_ai.usage.reasoning.output_tokens when</text>
+        <text class="qtX" x="470" y="292">the model thinks. Reasoning tokens are billed.</text>
+
+        <rect x="24" y="316" width="832" height="52" rx="10" fill="#FEF2F2" stroke="#FCA5A5" stroke-width="1.5"/>
+        <text class="qtR" x="44" y="338">A dashboard reading input_tokens alone sees 50 tokens on this request. The billed</text>
+        <text class="qtR" x="44" y="356">input was 200,230 tokens. It under-reports this one request by roughly 4,000x.</text>
+
+        <rect x="24" y="380" width="832" height="52" rx="10" fill="#E4F6F9" stroke="#0891A6" stroke-width="1.5"/>
+        <text class="qtI" x="44" y="402">Log all four and their sum. Without the two cache counters kept separately you</text>
+        <text class="qtI" x="44" y="420">cannot compute a cache hit rate at all, which is why the spec carries both.</text>
+
+        <rect x="24" y="448" width="832" height="44" rx="10" fill="#FFFFFF" stroke="#C7CFDA" stroke-width="1.5"/>
+        <rect x="42" y="462" width="14" height="14" rx="3" fill="#0891A6"/>
+        <text class="qtK" x="66" y="474">One counter is a measurement. Four counters are an explanation of your bill.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - the quartet, and the 4,000x under-report that one missing counter produces. Multipliers read 2026-08-13</figcaption>
+    </figure>
+
+    <div class="callout warn">
+      <strong>Two specs, two definitions, and the instrumentation has to reconcile them</strong>
+      The OpenTelemetry conventions describe <code>gen_ai.usage.cache_read.input_tokens</code> and <code>gen_ai.usage.cache_creation.input_tokens</code> as <em>included in</em> <code>gen_ai.usage.input_tokens</code>. The provider API's own <code>input_tokens</code> field excludes them. Those two sentences describe different arithmetic, so a naive field-to-attribute mapping produces a span that is wrong by the size of your cache. Do the addition in the instrumentation and emit the sum, keeping the two cache counters as their own attributes.
+    </div>
+
+    <div class="prompt-box good">
+      <span class="label">★ The whole quartet, four lines, once, in your client wrapper</span>
+      <p>u = resp.usage
+span.set_attribute("gen_ai.usage.cache_creation.input_tokens", u.cache_creation_input_tokens)
+span.set_attribute("gen_ai.usage.cache_read.input_tokens",     u.cache_read_input_tokens)
+span.set_attribute("gen_ai.usage.output_tokens",               u.output_tokens)
+# the spec wants cache tokens INCLUDED here, the API field excludes them: add them back
+span.set_attribute("gen_ai.usage.input_tokens",
+                   u.input_tokens + u.cache_creation_input_tokens + u.cache_read_input_tokens)</p>
+    </div>
+
+    <h3 style="margin-top:1.8rem">The caching economics, and why they are a latency problem too</h3>
+    <p>Caching is priced on both sides of the transaction, which is what makes it possible to lose money on it. Writing a cache entry costs more than sending the tokens uncached; reading one costs a tenth. All three multipliers below were read on <strong>2026-08-13</strong>.</p>
+
+    <table class="clean">
+      <tr><th>Operation</th><th>Multiplier vs base input</th><th>What it should look like on a span</th></tr>
+      <tr><td><strong>5-minute cache write</strong></td><td>1.25x</td><td><code>cache_creation.input_tokens</code> non-zero. Break-even arrives after a single read, so one follow-up turn pays for it</td></tr>
+      <tr><td><strong>1-hour cache write</strong></td><td>2x</td><td><code>cache_creation.input_tokens</code> non-zero and expensive. Needs two reads to break even, so it is a bet on the session continuing</td></tr>
+      <tr><td><strong>Cache read (hit)</strong></td><td>0.1x</td><td><code>cache_read.input_tokens</code> non-zero, <code>cache_creation</code> zero. This is the span you want to see most of the time</td></tr>
+    </table>
+
+    <p>Now the part teams do not expect: <strong>the time-to-live runs from the start of the writing request, and streaming time counts against it.</strong> A response that takes four minutes to stream has spent four of its five cached minutes before the user has even read it, leaving roughly one minute for the follow-up turn to land. That is a latency problem causing a cost problem, discoverable only if your spans carry both durations and cache counters, which is the entire thesis of this session in one sentence.</p>
+
+    <details class="card">
+      <summary><span class="mode self">Self-study</span>Three more silent cost regressions, all invisible without the quartet<span class="mini">4 min read</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <ul>
+          <li><strong>The minimum cacheable prefix is enforced without an error.</strong> Depending on the model it sits somewhere between 512 and 4,096 tokens, and a request below it is processed with no caching and no error returned. Your code says it is caching, your bill says it is not, and the only signal is <code>cache_creation.input_tokens</code> and <code>cache_read.input_tokens</code> both sitting at zero on a request you believe is cached. That is a silent multiple-x cost regression whose sole detector is an attribute you chose to log.</li>
+          <li><strong>The invalidation hierarchy runs tools, then system, then messages.</strong> Changing tool definitions invalidates the whole cache. "We added one tool" is a plausible sentence in a standup and a doubling of your input bill on the same traffic. The visible signature is a step change in cache hit rate on a deploy, which is why hit rate deserves step-change detection rather than a threshold (session b8).</li>
+          <li><strong>The tokenizer changed under a stable price.</strong> Newer models use a newer tokenizer that produces roughly 30% more tokens for identical text. Same posted price, same traffic, ~30% more spend. Your dollars-per-token chart looks perfect; the chart that moves is tokens-per-request, and you only have that chart if tokens are on spans.</li>
+          <li><strong>The contrast worth knowing.</strong> One major provider prices cache writes explicitly, so a badly placed breakpoint costs money. Another caches automatically with no write premium, so a prompt whose <em>prefix</em> varies - a timestamp at the top, a username in the system message - silently forfeits the entire discount instead. Both failures look identical on a dashboard that only tracks total spend.</li>
+        </ul>
+      </div>
+    </details>
+  </section>
+
+  <!-- ============ PART 3 ============ -->
+  <section class="section" id="latency">
+    <div class="section-kicker">
+      <span class="klabel">Part 3 · latency</span>
+      <h2>Two definitions, two SLOs, two derived quantities <span class="tag concept">7 min live</span></h2>
+    </div>
+    <p class="lede">"The bot is slow" is not one measurement. There are two published definitions of model latency and they move for different reasons, so a single p95 on a single number will hide whichever of the two is currently broken.</p>
+
+    <table class="clean">
+      <tr><th></th><th>Baseline latency</th><th>Time to first token</th></tr>
+      <tr><td><strong>What it measures</strong></td><td>The model's own time to process the prompt and produce the response, without reference to tokens per second</td><td>The gap between sending the prompt and the first token of the response arriving</td></tr>
+      <tr><td><strong>Dominated by</strong></td><td>Decode. Sensitive to <em>output</em> length</td><td>Prefill. Sensitive to <em>input</em> length</td></tr>
+      <tr><td><strong>Moves when</strong></td><td>You ask for a longer answer, or switch to a slower-decoding model</td><td>Your context grows, a cache miss forces a full prefill, or the provider queues you</td></tr>
+      <tr><td><strong>Where it lives</strong></td><td><code>gen_ai.client.operation.duration</code> as a metric, span duration on the trace</td><td><code>gen_ai.response.time_to_first_chunk</code> on the span when streaming, <code>gen_ai.client.operation.time_to_first_chunk</code> as a metric</td></tr>
+      <tr><td><strong>SLO</strong></td><td>Separate. This is the one users feel on completion</td><td>Separate. This is the one users feel as responsiveness</td></tr>
+    </table>
+
+    <p>Streaming belongs in this table only as a caveat. It improves <em>perceived</em> latency and changes nothing at all about total time, so a streaming rollout will move your TTFT numbers and leave your duration numbers exactly where they were. Treat it as a product decision rather than a performance fix. The published order of latency levers is deliberate and it comes with an explicit warning against optimising prematurely: model choice first, then token length in both directions, then streaming.</p>
+
+    <h3 style="margin-top:1.8rem">The two quantities worth computing on every trace</h3>
+    <p>Neither of these is in any specification. Both are trivial arithmetic over spans you already have, and between them they answer the two questions that get asked in every performance meeting: <em>would a faster model help</em>, and <em>where is the time we cannot see</em>.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 484" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="The same 6.8 second run measured twice. Under-instrumented, orchestration overhead is 4.6 seconds. Fully instrumented it is zero, while model time fraction is 32.4 percent in both cases.">
+        <style>
+          .ltH { font: 700 13px Inter, sans-serif; fill: #1B2230; }
+          .ltS { font: 700 12.5px Inter, sans-serif; fill: #16305C; }
+          .ltW { font: 400 10.5px ui-monospace, Menlo, monospace; fill: #FFFFFF; }
+          .ltM { font: 400 11px ui-monospace, Menlo, monospace; fill: #16305C; }
+          .ltL { font: 400 10.5px Inter, sans-serif; fill: #66707E; }
+          .ltX { font: 400 11px Inter, sans-serif; fill: #66707E; }
+          .ltR { font: 400 11px Inter, sans-serif; fill: #991B1B; }
+          .ltK { font: 600 12.5px Inter, sans-serif; fill: #08323A; }
+        </style>
+
+        <text class="ltH" x="24" y="30">The same 6.80 second run, measured twice</text>
+
+        <text class="ltS" x="24" y="54">A · what you shipped - two model spans and a lot of silence</text>
+        <rect x="24" y="62" width="832" height="24" rx="6" fill="#0C1F3F"/>
+        <text class="ltW" x="40" y="78">invoke_agent Insight Bot   6.80s   root</text>
+
+        <rect x="24" y="92" width="135" height="24" rx="5" fill="#16305C"/>
+        <rect x="159" y="92" width="551" height="24" rx="5" fill="#FEF2F2" stroke="#FCA5A5" stroke-width="1.5"/>
+        <text class="ltR" x="300" y="108">4.50s inside no span you emit</text>
+        <rect x="710" y="92" width="135" height="24" rx="5" fill="#16305C"/>
+        <rect x="845" y="92" width="11" height="24" rx="3" fill="#FEF2F2" stroke="#FCA5A5" stroke-width="1.5"/>
+        <text class="ltL" x="24" y="132">chat 1.10  ·  the gap  ·  chat 1.10  ·  a further 0.10 at the tail, also invisible</text>
+
+        <rect x="24" y="142" width="832" height="74" rx="10" fill="#FEF2F2" stroke="#FCA5A5" stroke-width="1.5"/>
+        <text class="ltM" x="44" y="164" fill="#991B1B">model_time_fraction    = 2.20s / 6.80s = 32.4%</text>
+        <text class="ltM" x="44" y="182" fill="#991B1B">orchestration_overhead = 6.80s - 2.20s = 4.60s   (67.6% of the run)</text>
+        <text class="ltR" x="44" y="204">Overhead that large is not an orchestration problem. It is a missing span.</text>
+
+        <text class="ltS" x="24" y="244">B · fully instrumented - same run, same code, nothing added but spans</text>
+        <rect x="24" y="252" width="832" height="24" rx="6" fill="#0C1F3F"/>
+        <text class="ltW" x="40" y="268">invoke_agent Insight Bot   6.80s   root</text>
+
+        <rect x="24" y="282" width="135" height="24" rx="5" fill="#16305C"/>
+        <rect x="159" y="282" width="24" height="24" rx="4" fill="#3F62A8"/>
+        <rect x="183" y="282" width="514" height="24" rx="5" fill="#0891A6"/>
+        <text class="ltW" x="200" y="298">retrieval metrics_daily   4.20s</text>
+        <rect x="697" y="282" width="12" height="24" rx="3" fill="#3F62A8"/>
+        <rect x="709" y="282" width="135" height="24" rx="5" fill="#16305C"/>
+        <rect x="844" y="282" width="12" height="24" rx="3" fill="#3F62A8"/>
+        <text class="ltL" x="24" y="322">chat 1.10  ·  tool 0.20  ·  retrieval 4.20  ·  tool 0.10  ·  chat 1.10  ·  tool 0.10</text>
+
+        <rect x="24" y="332" width="832" height="74" rx="10" fill="#E4F6F9" stroke="#0891A6" stroke-width="1.5"/>
+        <text class="ltM" x="44" y="354" fill="#08323A">model_time_fraction    = 2.20s / 6.80s = 32.4%   unchanged</text>
+        <text class="ltM" x="44" y="372" fill="#08323A">orchestration_overhead = 6.80s - 6.80s = 0.00s</text>
+        <text class="ltX" x="44" y="394">The fraction needed no new spans to be true. A faster model saves at most 2.20s of 6.80s.</text>
+
+        <rect x="24" y="424" width="832" height="44" rx="10" fill="#FFFFFF" stroke="#C7CFDA" stroke-width="1.5"/>
+        <rect x="42" y="438" width="14" height="14" rx="3" fill="#0891A6"/>
+        <text class="ltK" x="66" y="450">Overhead measures your instrumentation. The fraction measures your architecture.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - the two derived quantities on the same run, before and after coverage</figcaption>
+    </figure>
+
+    <p><strong><code>model_time_fraction</code> = sum(chat span durations) / root duration.</strong> A low fraction means the problem is tools, network or orchestration, and <em>a faster model will not help</em>. The quietly remarkable thing about this number is that it is computable on day one from auto-instrumentation alone - the chat spans are the ones your SDK gives you free, and the root duration is the one thing you always know. It came out at 32.4% both before and after the coverage work above. Which means the answer to "should we migrate to the fast model" was available on the very first trace, and it was no.</p>
+
+    <p><strong><code>orchestration_overhead</code> = root duration - (sum of sequential children + max of parallel children).</strong> This is the coverage thesis of session b1 restated as a metric. Large overhead does not mean your orchestration layer is slow; it means your orchestration layer is <em>undescribed</em>, and the honest reading of a big number here is "there is a span I have not written yet". Note the shape of the formula: sequential children add, concurrent children take a maximum, so you cannot compute it without start timestamps.</p>
+
+    <div class="prompt-box good">
+      <span class="label">★ Both quantities, on any trace you already store</span>
+      <p>model_time_fraction = sum(s.dur for s in kids if s.op == "chat") / root.dur
+
+# sequential siblings add, concurrent siblings take a max
+covered = merged_interval_length([(s.start, s.start + s.dur) for s in kids])
+orchestration_overhead = root.dur - covered</p>
+    </div>
+  </section>
+
+  <!-- ============ PART 4 ============ -->
+  <section class="section" id="diagnostic">
+    <div class="section-kicker">
+      <span class="klabel">Part 4 · the rule</span>
+      <h2>High duration is two different bugs <span class="tag concept">4 min live</span></h2>
+    </div>
+    <p class="lede">This is the smallest, most useful rule in the session, and it is the reason tokens belong on spans rather than only on a billing dashboard. A slow span with a lot of output tokens and a slow span with almost no output tokens are unrelated problems with unrelated fixes, and duration alone cannot tell them apart.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 416" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="A quadrant of span duration against output tokens. High duration with low output is a service problem; high duration with high output is a generation-length problem.">
+        <style>
+          .dgH { font: 700 13px Inter, sans-serif; fill: #1B2230; }
+          .dgC { font: 700 11px Inter, sans-serif; fill: #16305C; }
+          .dgA { font: 700 11px Inter, sans-serif; fill: #66707E; }
+          .dgTr { font: 700 12.5px Inter, sans-serif; fill: #991B1B; }
+          .dgTb { font: 700 12.5px Inter, sans-serif; fill: #08323A; }
+          .dgTm { font: 700 12.5px Inter, sans-serif; fill: #66707E; }
+          .dgR { font: 400 11px Inter, sans-serif; fill: #991B1B; }
+          .dgI { font: 400 11px Inter, sans-serif; fill: #08323A; }
+          .dgX { font: 400 11px Inter, sans-serif; fill: #66707E; }
+          .dgK { font: 600 12.5px Inter, sans-serif; fill: #08323A; }
+        </style>
+
+        <text class="dgH" x="24" y="30">One 12.4 second span. The output token count is the whole diagnosis.</text>
+
+        <text class="dgC" x="312" y="54" text-anchor="middle">OUTPUT TOKENS LOW · 90</text>
+        <text class="dgC" x="680" y="54" text-anchor="middle">OUTPUT TOKENS HIGH · 3,100</text>
+
+        <text class="dgA" x="24" y="140">DURATION</text>
+        <text class="dgA" x="24" y="156">HIGH</text>
+        <text class="dgA" x="24" y="172">12.4s</text>
+
+        <rect x="136" y="64" width="352" height="170" rx="10" fill="#FEF2F2" stroke="#FCA5A5" stroke-width="1.5"/>
+        <text class="dgTr" x="154" y="90">A service problem</text>
+        <text class="dgR" x="154" y="112">The model barely generated anything, so</text>
+        <text class="dgR" x="154" y="130">the time went somewhere else: queueing,</text>
+        <text class="dgR" x="154" y="148">a cold start, the network, or the tool</text>
+        <text class="dgR" x="154" y="166">backend sitting behind this span.</text>
+        <text class="dgR" x="154" y="192">Fix: look at the children and the</text>
+        <text class="dgR" x="154" y="210">provider, never at the prompt.</text>
+
+        <rect x="504" y="64" width="352" height="170" rx="10" fill="#E4F6F9" stroke="#0891A6" stroke-width="1.5"/>
+        <text class="dgTb" x="522" y="90">A generation-length problem</text>
+        <text class="dgI" x="522" y="112">The model was decoding the whole time.</text>
+        <text class="dgI" x="522" y="130">This is a prompt and max_tokens</text>
+        <text class="dgI" x="522" y="148">conversation, not an infrastructure</text>
+        <text class="dgI" x="522" y="166">one, and no provider can fix it.</text>
+        <text class="dgI" x="522" y="192">Fix: ask for less output, or accept</text>
+        <text class="dgI" x="522" y="210">the cost of the answer you wanted.</text>
+
+        <text class="dgA" x="24" y="284">DURATION</text>
+        <text class="dgA" x="24" y="300">LOW</text>
+        <text class="dgA" x="24" y="316">0.9s</text>
+
+        <rect x="136" y="248" width="352" height="90" rx="10" fill="#EDF2FB" stroke="#AFC0E4" stroke-width="1.5"/>
+        <text class="dgTm" x="154" y="274">Fine, and worth one glance</text>
+        <text class="dgX" x="154" y="296">Fast and short. Check it is not the empty</text>
+        <text class="dgX" x="154" y="314">answer: a 2-3 token reply, finish reason</text>
+        <text class="dgX" x="154" y="332">end_turn, HTTP 200, no error anywhere.</text>
+
+        <rect x="504" y="248" width="352" height="90" rx="10" fill="#EDF2FB" stroke="#AFC0E4" stroke-width="1.5"/>
+        <text class="dgTm" x="522" y="274">Fine</text>
+        <text class="dgX" x="522" y="296">Fast decode on a long answer. Nothing to</text>
+        <text class="dgX" x="522" y="314">do about latency here. Watch cost per</text>
+        <text class="dgX" x="522" y="332">successful task instead.</text>
+
+        <rect x="24" y="356" width="832" height="44" rx="10" fill="#FFFFFF" stroke="#C7CFDA" stroke-width="1.5"/>
+        <rect x="42" y="370" width="14" height="14" rx="3" fill="#0891A6"/>
+        <text class="dgK" x="66" y="382">Without per-span token counts these two cells are the same alert and the same wrong fix.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - the diagnostic rule, and why tokens have to live on the span</figcaption>
+    </figure>
+
+    <div class="callout win">
+      <strong>The argument, in one sentence you can take to a review</strong>
+      Tokens on a billing dashboard let you know what you spent. Tokens on a span let you tell a queueing problem from a verbosity problem in the time it takes to open one trace. That is the whole return on the two extra <code>set_attribute</code> calls, and it is why the token attributes are Recommended rather than optional in the conventions.
+    </div>
+
+    <details class="card">
+      <summary><span class="mode self">Self-study</span>What multiplies underneath all of this: agents are expensive by design<span class="mini">3 min read</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>One published production account puts agent workloads at roughly <strong>4x the tokens of a chat interaction</strong> and multi-agent systems at roughly <strong>15x</strong>, with token usage alone explaining about <strong>80% of the variance</strong> in performance on one browsing benchmark. State the caveat when you use those numbers: they describe one company's own research feature around 2025, not a law of nature. They are a well-documented order of magnitude from a real production system and nothing more.</p>
+        <p>Two consequences for your span design. First, if a 15x token multiplier is on the table, per-span attribution stops being a nice-to-have and becomes the only way anyone will approve the architecture. Second, the denominator matters more than the numerator: cost per <em>successful</em> task is mean attempt cost divided by success rate, so a 60% success rate multiplies your effective cost by about 1.67x, and the failed attempts are the expensive ones because failures run long before giving up. Session a4 does that arithmetic properly for a leadership audience; what you owe it from here is the per-span data it needs.</p>
+        <p>Other line items that show up as unexplained spend and are worth a span attribute each, all read <strong>2026-08-13</strong>: web search at $10 per 1,000 searches with results re-counted as input tokens on later turns; a single unbounded web fetch running to roughly 125,000 tokens for a 500 kB PDF; code execution at 1,550 free container-hours per organisation per month then $0.05 per hour, billed when files are attached even if the tool is never called; a 1.1x multiplier on every token category when you pin inference geography; tool-use system prompt overhead of 286 to 804 tokens per request that never appears in your own prompt; and batch processing at 50% off input and output which stacks with caching.</p>
+      </div>
+    </details>
+  </section>
+
+  <!-- ============ DEMO 1 ============ -->
+  <section class="section" id="demo-1">
+    <div class="section-kicker">
+      <span class="klabel">Demo 1 of 2</span>
+      <h2>Attribute one run, end to end <span class="tag demo">★ 12 min · everyone builds</span></h2>
+    </div>
+    <p class="lede">Take one real agent run in your own system and produce a defensible cost figure for it. The goal is not the number, it is the list of things you had to fix to get the number.</p>
+
+    <div class="steps">
+      <div class="step"><p>Write both cost queries from Part 1 - leaf-only and root-only - and run them on the same trace. If they disagree, stop and find out why before you do anything else. That disagreement is worth more than the cost figure.</p></div>
+      <div class="step"><p>Add the quartet to your client wrapper: <code>gen_ai.usage.input_tokens</code> as the reconciled sum, plus <code>gen_ai.usage.cache_creation.input_tokens</code>, <code>gen_ai.usage.cache_read.input_tokens</code> and <code>gen_ai.usage.output_tokens</code> separately. Then compute a cache hit rate. If you could not compute one before, notice that the blocker was never analysis - it was two missing attributes.</p></div>
+      <div class="step"><p>Find one cached request in your traffic and check whether <code>input_tokens</code> alone would have described it honestly. On a large cached prefix the gap between that field and your billed input is the size of your document, which for a 200,000-token prefix and a short question is a factor of thousands.</p></div>
+      <div class="step"><p>Now price it, twice: once at your current rates, once at rates with a 30% higher token count for the same text. That second number is what a tokenizer change does to you at an unchanged posted price, and it is the cheapest stress test in this course.</p></div>
+    </div>
+
+    <div class="callout tip">
+      <strong>The one habit worth forming today</strong>
+      Put the tokens on the span in the same wrapper that starts the span, not in a later enrichment step. Attribution that depends on a second system joining two datasets is attribution that stops working on the day of an incident, which is the only day you need it.
+    </div>
+  </section>
+
+  <!-- ============ DEMO 2 ============ -->
+  <section class="section" id="demo-2">
+    <div class="section-kicker">
+      <span class="klabel">Demo 2 of 2</span>
+      <h2>Decide whether a faster model would help <span class="tag demo">★ 8 min · everyone computes</span></h2>
+    </div>
+    <p class="lede">Somebody in your organisation is currently proposing a model migration to fix latency. This exercise settles that argument with two divisions and no meetings.</p>
+
+    <div class="steps">
+      <div class="step"><p>Pick the slowest trace you can find. Sum the durations of every <code>chat</code> span in it and divide by the root duration. That is <code>model_time_fraction</code>. If it is under about a third, a faster model cannot save more than a third of the wall clock even if it were instantaneous, and you now have a number to say so with.</p></div>
+      <div class="step"><p>Merge the child intervals - overlapping siblings union, they do not add - and subtract from the root duration. That is <code>orchestration_overhead</code>. Read a large value as a missing span rather than as slow glue, and go find which step it is.</p></div>
+      <div class="step"><p>Split your latency dashboard in two: time to first chunk, and total duration. Give them separate SLOs. Then go back through the last month of latency incidents and label each one as prefill or decode. Most teams find their single p95 was averaging two unrelated failure modes into one flat line.</p></div>
+      <div class="step"><p>Finally, take the ten slowest spans and plot duration against output tokens. The two clusters from Part 4 will separate visibly, and each cluster goes to a different team. That plot is a better prioritisation artifact than any latency percentile.</p></div>
+    </div>
+
+    <div class="callout warn">
+      <strong>What this session hands to b5</strong>
+      You now have per-span tokens, per-span durations and two derived quantities. Session b5 mounts the simulator and puts them to work on a real diagnosis: a run where <code>orchestration_overhead</code> is 4.60 seconds of 6.80, and where the cost per run becomes knowable at $0.0180 only once the token attributes exist. The arithmetic you built today is what makes the seventh rung of that ladder possible.
+    </div>
+  </section>
+
+  <!-- ============ HOMEWORK ============ -->
+  <section class="section" id="exercise">
+    <div class="section-kicker">
+      <span class="klabel">Homework</span>
+      <h2>Try it yourself - this week <span class="tag exercise">◐ 45-60 min total</span></h2>
+    </div>
+    <ul>
+      <li>Audit your cost query for the double count. Read the actual SQL or the actual dashboard definition and establish which depth it sums. If nobody can tell you, assume it is summing everything and that your reported cost per request is roughly twice reality - a satisfying bug to fix, because it makes the number go down.</li>
+      <li>Compute a cache hit rate. If you cannot, you have found the two missing attributes, and the fix is four lines in one wrapper. Then look for requests where both cache counters are zero on a prompt you believe is cached - that is the silent minimum-prefix rule, and it returns no error.</li>
+      <li>Compute <code>model_time_fraction</code> across your ten slowest traces and write the median on a sticky note. Bring it to the next meeting where somebody proposes a faster model. This is the highest ratio of insight to effort in the whole session.</li>
+      <li>Split TTFT from total duration in whatever dashboard your team actually looks at, and set two SLOs. Then check whether any current alert would fire on a TTFT regression alone. For most teams the answer is no, which means prefill can degrade indefinitely without anyone being told.</li>
+      <li>Re-verify every price on this page against the provider's own pricing page and write today's date next to each one. That habit is worth more than the numbers, because the numbers move and the habit does not.</li>
+    </ul>
+  </section>
+
+  <!-- ============ SOURCES ============ -->
+  <section class="section" id="official">
+    <div class="section-kicker">
+      <span class="klabel">Source material</span>
+      <h2>Official sources covered</h2>
+    </div>
+    <p class="lede">Every attribute name, multiplier and definition on this page traces to a primary source - the OpenTelemetry GenAI semantic conventions and the provider's own caching and latency documentation - catalogued in this course's source map and read on 2026-08-13. This page covers:</p>
+    <div class="covered">
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Token attribution double-counts by design: aggregate usage on <code>invoke_agent</code> plus per-call usage on each child</span><span class="note">Part 1 · the trap set up in b3, resolved as sum-at-one-depth</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">The Recommended token attributes, including <code>cache_read.input_tokens</code> and <code>cache_creation.input_tokens</code> as included in input tokens</span><span class="note">Part 2 · and the reconciliation the instrumentation has to perform</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Cache multipliers 1.25x / 2x / 0.1x, break-even after one read at 5 minutes or two at 1 hour, TTL from the start of the writing request</span><span class="note">Part 2 · read 2026-08-13, re-verify per cohort</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Baseline latency versus time to first token, and the three latency levers in their published order</span><span class="note">Part 3 · separate SLOs, streaming as perceived only</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">One span per logical operation including automatic retries; billed token counts; no usage on <code>fetch_response</code></span><span class="note">Part 1 self-study · why additivity breaks</span></div>
+      <div class="covered-row"><span class="status pill light">◐</span><span class="name"><code>model_time_fraction</code> and <code>orchestration_overhead</code></span><span class="note">Part 3 · derivations, not specification. No standard defines them - they are arithmetic over spans you already have</span></div>
+      <div class="covered-row"><span class="status pill light">◐</span><span class="name">Agent token multipliers of roughly 4x and 15x, and token usage explaining ~80% of variance</span><span class="note">Part 4 self-study · one production system circa 2025, not a universal law</span></div>
+      <div class="covered-row"><span class="status pill light">◐</span><span class="name">Cost per successful task as mean attempt cost divided by success rate</span><span class="note">Named here as a derivation · leadership treatment is a4</span></div>
+      <div class="covered-row"><span class="status pill light">◐</span><span class="name">The latency and token metrics with their exact bucket boundaries</span><span class="note">Not covered by design · b8 owns alerting and SLOs on these</span></div>
+      <div class="covered-row"><span class="status pill light">◐</span><span class="name">Per-platform dollar pricing beyond the multipliers</span><span class="note">Deliberately absent · the source map could not verify platform pricing, so this page quotes none</span></div>
+    </div>
+  </section>
+
+  <!-- ============ QUIZ ============ -->
+  <section class="section" id="quiz">
+    <div class="section-kicker">
+      <span class="klabel">Check yourself</span>
+      <h2>Three questions before you go 🎯 <span class="tag exercise">◐ 90 seconds</span></h2>
+    </div>
+    <div class="quiz-q" data-answer="1">
+      <p class="qtext">1 · Your root <code>invoke_agent</code> span reports 3,760 input tokens. Its two <code>chat</code> children report 820 and 2,940. Your cost dashboard sums the usage attribute across every span in the trace. What is it reporting?</p>
+      <button class="qopt" type="button">A · The correct total, since summing all spans is how you capture every call</button>
+      <button class="qopt" type="button">B · 7,520 input tokens, exactly twice the truth, because the aggregate on the parent and the counts on the children describe the same tokens at two depths</button>
+      <button class="qopt" type="button">C · An undercount, because child spans do not carry usage attributes</button>
+      <p class="qwhy">The conventions ask the agent span for an aggregate and each model call for its own, so both are present and both are right. Summing across depths counts every token twice, and the error is silent because 7,520 is a perfectly plausible number. Sum at one depth only, say which depth in a comment, and assert the two agree so a coverage gap announces itself as arithmetic rather than as an invoice.</p>
+    </div>
+    <div class="quiz-q" data-answer="2">
+      <p class="qtext">2 · A request sends a 200,000-token cached document plus a 50-token question. The span reports <code>gen_ai.usage.input_tokens: 50</code>. What has gone wrong?</p>
+      <button class="qopt" type="button">A · The instrumentation is broken and dropped the document</button>
+      <button class="qopt" type="button">B · Nothing at all, and nothing needs to change - 50 is the billed input</button>
+      <button class="qopt" type="button">C · Nothing is broken, but the field counts only tokens after the last cache breakpoint, so a dashboard reading it alone under-reports this request by roughly 4,000x - you need the cache-read and cache-creation counters and their sum</button>
+      <p class="qwhy">The measurement is honest and the interpretation is not. Billed input here is 200,230 tokens, of which 200,000 were read from cache at a tenth of base rate. Keeping the two cache counters separately is also the only way a cache hit rate can exist at all, which is precisely why the conventions carry both of them rather than a single combined figure.</p>
+    </div>
+    <div class="quiz-q" data-answer="0">
+      <p class="qtext">3 · A trace has a root duration of 6.80s and its <code>chat</code> spans total 2.20s. Someone proposes migrating to a faster model to fix latency. What do you say?</p>
+      <button class="qopt" type="button">A · <code>model_time_fraction</code> is 32.4%, so even an instantaneous model saves at most 2.20 of 6.80 seconds. The time is elsewhere, and a large <code>orchestration_overhead</code> would say it is in a step nobody instrumented</button>
+      <button class="qopt" type="button">B · Agree, since model latency dominates in agent systems</button>
+      <button class="qopt" type="button">C · The comparison cannot be made without a load test</button>
+      <p class="qwhy">This is the cheapest decision in the session: two durations and one division. The pleasant surprise is that <code>model_time_fraction</code> needs no instrumentation work at all, because chat spans are what auto-instrumentation gives you free and the root duration is always known. The number was available on the very first trace, before any coverage work, and it already said no.</p>
+    </div>
+    <p class="quiz-score"></p>
+  </section>
+
+  <!-- ============ CHEAT SHEET ============ -->
+  <section class="cheat" id="cheatsheet">
+    <h3>Builder session 4 cheat sheet <span>· pin this</span></h3>
+    <div class="grid-2">
+      <div class="cheat-item"><b>Sum at one depth</b><span>Leaves or root, never both. Two depths is a 2x error, and it is silent. Assert they agree.</span></div>
+      <div class="cheat-item"><b>The token quartet</b><span><code>input_tokens</code>, <code>output_tokens</code>, <code>cache_creation.input_tokens</code>, <code>cache_read.input_tokens</code>, and their sum.</span></div>
+      <div class="cheat-item"><b>The breakpoint trap</b><span><code>input_tokens</code> counts only tokens after the last cache breakpoint. 200k cached + a 50-token question reads 50.</span></div>
+      <div class="cheat-item"><b>Cache multipliers (2026-08-13)</b><span>Write 1.25x at 5 min, 2x at 1 hour, read 0.1x. Break-even after one read, or two on the hour TTL.</span></div>
+      <div class="cheat-item"><b>Hit rate needs both counters</b><span>No cache_creation and cache_read separately, no hit rate. That is why the spec carries both.</span></div>
+      <div class="cheat-item"><b>Two latency SLOs</b><span>TTFT is prefill and input-length sensitive. Total is decode and output-length sensitive. Never one p95.</span></div>
+      <div class="cheat-item"><b>model_time_fraction</b><span>sum(chat durations) / root duration. Low means a faster model will not help. Free from day one.</span></div>
+      <div class="cheat-item"><b>The diagnostic rule</b><span>Slow + many output tokens = fix the prompt. Slow + few output tokens = a service problem. Tokens on spans is what lets you tell.</span></div>
+    </div>
+  </section>
+
+  <footer class="pagefoot">
+    <span>Builder session 4 of 10 · learn-ai-observability-with-phoebe · by Phoebe Fu &nbsp;·&nbsp; 📚 <a href="https://phoebefu6.github.io/learn-with-phoebe/">Learn with Phoebe ↗</a></span>
+    <span><a href="../index.html">← Course home</a> &nbsp;·&nbsp; <a href="b5-reading-a-broken-trace.html">Next: Reading a broken trace →</a></span>
+  </footer>
+
+</main>
+
+<script src="../assets/app.js?v=2"></script>
+</body>
+</html>

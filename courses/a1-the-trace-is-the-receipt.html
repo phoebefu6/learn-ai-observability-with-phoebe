@@ -1,0 +1,477 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Leader session 1 · The trace is the receipt - learn ai observability with phoebe</title>
+<link rel="stylesheet" href="../assets/style.css?v=2">
+</head>
+<body>
+
+<div class="toolbar">
+  <div class="wrap">
+    <span class="crumb"><a href="../index.html">learn-ai-observability-with-phoebe</a> / Leader session 1 of 6</span>
+    <button class="btn" id="toggle-all" type="button">Expand all</button>
+    <button class="btn primary" id="zoom-toggle" type="button">Projector zoom: off</button>
+  </div>
+</div>
+
+<header class="masthead">
+  <div class="wrap">
+    <div class="eyebrow">Learn AI Observability with Phoebe · Leader track · Session 1 of 6</div>
+    <h1>The trace is the receipt: <span class="accent">"it works in evals" is not "it worked at 09:14"</span></h1>
+    <p class="sub">An eval score is a claim about a population you constructed. A trace is the receipt for one request that one real person made at a specific minute on a specific Tuesday. This session is the argument for why your organisation needs the second thing even after it has bought the first, told through one incident inside a company and three that were published to the world. No code. Decisions, and the questions that surface them.</p>
+    <div class="chip-row">
+      <span class="chip level">🟢 Leader track</span>
+      <span class="chip audience">Heads of engineering · platform leads · SRE managers</span>
+      <span class="chip time">45 min</span>
+    </div>
+    <div class="agenda">
+      <span class="a1" style="flex:1">0-3 · Welcome</span>
+      <span class="a2" style="flex:3">3-14 · The Beacon incident</span>
+      <span class="a3" style="flex:5">14-34 · Three published incidents</span>
+      <span class="a4" style="flex:3">34-45 · Decisions + Q&amp;A</span>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <!-- ============ INTRO ============ -->
+  <section class="section" id="intro">
+    <div class="section-kicker">
+      <span class="klabel">Part 0</span>
+      <h2>The one sentence you are here to be able to say out loud</h2>
+    </div>
+    <p class="lede">Evals tell you whether it works. Observability tells you what actually happened. Both are necessary, they cost different money, and they answer questions that cannot substitute for each other. The leader track exists because the second one is almost always the thing that gets cut, and the cut is invisible until the week it is not.</p>
+    <div class="legend">
+      <span class="pill solid">Live - presented in session</span>
+      <span class="pill light">Self-study - read after class</span>
+      <span class="pill inkpill">Official sources covered</span>
+    </div>
+    <div class="callout win">
+      <strong>★ What you walk out with today</strong>
+      A story you can retell in a board meeting in ninety seconds, three published incidents with sources you can hand to a sceptic, the name of the specific mechanism that lets a broken AI system hold a green dashboard, and a written rule for what your organisation does the next time a user says it is wrong and your evals say it is fine.
+    </div>
+    <div class="callout tip">
+      <strong>What this session is not</strong>
+      It is not a tooling comparison, it is not a budget request, and it is not a claim that evals were a mistake. Sessions a2 through a6 handle coverage, dashboards, cost, on-call and the buy-versus-build decision in that order. Today has one job: making the gap between "it passed" and "it happened" concrete enough that nobody in the room can un-see it.
+    </div>
+  </section>
+
+  <!-- ============ PART 1 ============ -->
+  <section class="section" id="beacon">
+    <div class="section-kicker">
+      <span class="klabel">Part 1 · the incident</span>
+      <h2>Tuesday, 09:14 <span class="tag concept">10 min live</span></h2>
+    </div>
+    <p class="lede">Beacon is a mid-size company with an internal assistant called Insight Bot. Executives ask it questions about the business and it answers in plain language over the warehouse. It shipped eleven weeks ago, it passed its evals comfortably, and it is well liked. This is the shape of the week it went wrong.</p>
+
+    <p>On Tuesday at 09:14, Insight Bot begins telling executives yesterday's revenue figure. The figure is wrong. Not wildly wrong, which is the problem - it is last Monday's number, delivered in this morning's sentence, in the same confident register as every correct answer it has ever given. It does this intermittently. It raises no error. It triggers no alert. The p95 latency dashboard is green all week, because the p95 latency genuinely is fine.</p>
+
+    <p>The first human signal arrives on Wednesday afternoon, when a finance lead notices a number in a slide deck she cannot reconcile. It is escalated as a data quality question, then as a warehouse question, then finally as an AI question. The mechanism is found on Thursday, by an engineer reading code rather than telemetry, because there was no telemetry to read.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 420" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="The Beacon incident step by step: the warehouse query times out and returns zero rows, a try/except swallows it, a 19.4 hour old cache entry is served, and the model summarises stale data - while the telemetry reports a healthy 200 response with span status OK.">
+        <style>
+          .biT { font: 700 12px Inter, sans-serif; fill: #FFFFFF; }
+          .biH { font: 700 12px Inter, sans-serif; fill: #1B2230; }
+          .biX { font: 400 11px Inter, sans-serif; fill: #66707E; }
+          .biR { font: 400 11px Inter, sans-serif; fill: #991B1B; }
+          .biC { font: 400 11px Inter, sans-serif; fill: #08323A; }
+          .biK { font: 600 12.5px Inter, sans-serif; fill: #08323A; }
+        </style>
+
+        <text class="biH" x="24" y="40">Step</text>
+        <text class="biH" x="186" y="40">What actually happened - Tuesday 09:14</text>
+        <text class="biH" x="596" y="40">What the telemetry said</text>
+
+        <rect x="24" y="52" width="152" height="52" rx="10" fill="#0C1F3F"/>
+        <text class="biT" x="42" y="74">User asks</text>
+        <text class="biT" x="42" y="92" fill="#AFC0E4">09:14:02</text>
+        <rect x="186" y="52" width="398" height="52" rx="10" fill="#EDF2FB" stroke="#AFC0E4" stroke-width="1.5"/>
+        <text class="biX" x="204" y="74">An exec asks Insight Bot for yesterday's revenue.</text>
+        <text class="biX" x="204" y="92">An ordinary question, asked a hundred times a week.</text>
+        <rect x="596" y="52" width="260" height="52" rx="10" fill="#E4F6F9" stroke="#0891A6" stroke-width="1.5"/>
+        <text class="biC" x="614" y="74">1 request. HTTP 200.</text>
+        <text class="biC" x="614" y="92">Duration 6.8s. Normal.</text>
+
+        <rect x="24" y="112" width="152" height="52" rx="10" fill="#16305C"/>
+        <text class="biT" x="42" y="134">Warehouse query</text>
+        <text class="biT" x="42" y="152" fill="#AFC0E4">09:14:03</text>
+        <rect x="186" y="112" width="398" height="52" rx="10" fill="#FEF2F2" stroke="#FCA5A5" stroke-width="1.5"/>
+        <text class="biR" x="204" y="134">The revenue query runs 4.1 seconds, then times out.</text>
+        <text class="biR" x="204" y="152">It returns zero rows. That is the whole failure.</text>
+        <rect x="596" y="112" width="260" height="52" rx="10" fill="#E4F6F9" stroke="#0891A6" stroke-width="1.5"/>
+        <text class="biC" x="614" y="134">Nothing. There is no span</text>
+        <text class="biC" x="614" y="152">here to be slow or empty.</text>
+
+        <rect x="24" y="172" width="152" height="52" rx="10" fill="#3F62A8"/>
+        <text class="biT" x="42" y="194">Error handling</text>
+        <text class="biT" x="42" y="212" fill="#EDF2FB">09:14:07</text>
+        <rect x="186" y="172" width="398" height="52" rx="10" fill="#FEF2F2" stroke="#FCA5A5" stroke-width="1.5"/>
+        <text class="biR" x="204" y="194">The error handler catches the timeout, carries on.</text>
+        <text class="biR" x="204" y="212">Nobody wrote a line to say the failure happened.</text>
+        <rect x="596" y="172" width="260" height="52" rx="10" fill="#E4F6F9" stroke="#0891A6" stroke-width="1.5"/>
+        <text class="biC" x="614" y="194">Span status: OK.</text>
+        <text class="biC" x="614" y="212">Error rate unchanged.</text>
+
+        <rect x="24" y="232" width="152" height="52" rx="10" fill="#3F62A8"/>
+        <text class="biT" x="42" y="254">Cache fallback</text>
+        <text class="biT" x="42" y="272" fill="#EDF2FB">09:14:07</text>
+        <rect x="186" y="232" width="398" height="52" rx="10" fill="#FEF2F2" stroke="#FCA5A5" stroke-width="1.5"/>
+        <text class="biR" x="204" y="254">It falls back to a cache entry from 19.4 hours ago.</text>
+        <text class="biR" x="204" y="272">Yesterday's number is now last Monday's number.</text>
+        <rect x="596" y="232" width="260" height="52" rx="10" fill="#E4F6F9" stroke="#0891A6" stroke-width="1.5"/>
+        <text class="biC" x="614" y="254">Nothing. No span, no</text>
+        <text class="biC" x="614" y="272">event, no attribute.</text>
+
+        <rect x="24" y="292" width="152" height="52" rx="10" fill="#0891A6"/>
+        <text class="biT" x="42" y="314">The answer</text>
+        <text class="biT" x="42" y="332" fill="#E4F6F9">09:14:09</text>
+        <rect x="186" y="292" width="398" height="52" rx="10" fill="#FEF2F2" stroke="#FCA5A5" stroke-width="1.5"/>
+        <text class="biR" x="204" y="314">The model summarises the stale rows, fluently.</text>
+        <text class="biR" x="204" y="332">It reads exactly as confident as a right answer.</text>
+        <rect x="596" y="292" width="260" height="52" rx="10" fill="#E4F6F9" stroke="#0891A6" stroke-width="1.5"/>
+        <text class="biC" x="614" y="314">p95 green. Zero alerts</text>
+        <text class="biC" x="614" y="332">fired, all week.</text>
+
+        <rect x="24" y="360" width="832" height="44" rx="10" fill="#FFFFFF" stroke="#C7CFDA" stroke-width="1.5"/>
+        <rect x="42" y="374" width="14" height="14" rx="3" fill="#0891A6"/>
+        <text class="biK" x="66" y="386">Nothing in the right column is false. It is simply everything the team had chosen to record.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - the Beacon incident, step by step, next to everything the team could see</figcaption>
+    </figure>
+
+    <details class="card" open>
+      <summary><span class="mode live">Live</span>Why the dashboard was green, and was not lying<span class="mini">4 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>There is a temptation to treat a green dashboard during an incident as a monitoring failure, as though the tool broke. It did not. The dashboard aggregated exactly the signals it was given, correctly, and every one of those signals was genuinely healthy.</p>
+        <table class="clean">
+          <tr><th>The signal</th><th>What it reported</th><th>Why that was correct</th></tr>
+          <tr><td><strong>HTTP status</strong></td><td>200, every time</td><td>The service did return a response. Success is not a status code</td></tr>
+          <tr><td><strong>Latency p95</strong></td><td>Well inside target</td><td>Serving a stale cache entry is fast. Degradation made it faster, not slower</td></tr>
+          <tr><td><strong>Error rate</strong></td><td>Flat</td><td>The exception was caught, so from the framework's point of view no error occurred</td></tr>
+          <tr><td><strong>Eval suite</strong></td><td>Passing</td><td>It runs against a fixed set of inputs and a fresh warehouse. It cannot see a Tuesday</td></tr>
+          <tr><td><strong>User feedback</strong></td><td>Silent for a day</td><td>The answers were plausible. Nobody reports a plausible answer</td></tr>
+        </table>
+        <p>The lesson to state plainly, because it is the whole reason this course exists: <strong>a monitoring system can only be wrong about things it measures.</strong> Beacon's failure lived entirely in the space between the measurements, and no amount of tuning the existing signals would have moved it. The fix was a decision about where to look, made by a person, before anybody knew what they were looking for.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode self">Self-study</span>What Beacon tried first, and why each attempt failed<span class="mini">3 min read</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>The order in which a team attacks an invisible failure tells you what it can see. Beacon's sequence is the common one, and every step in it was reasonable.</p>
+        <ul>
+          <li><strong>Re-run the evals.</strong> They passed, which was taken as evidence the assistant was fine. It was actually evidence that the eval harness has its own warehouse connection and its own fixed questions, and had never once exercised the fallback path.</li>
+          <li><strong>Blame the model.</strong> A change of model was proposed within an hour of the first report. This is the most expensive wrong turn available, because it consumes a week and produces a confident negative result that means nothing.</li>
+          <li><strong>Look at the prompt.</strong> Also reasonable, also useless. The prompt was correct. The model did exactly what a good model should do with the rows it was handed.</li>
+          <li><strong>Ask the warehouse team.</strong> This got closest, because the timeout was real and visible in the warehouse's own logs. But nobody could connect a warehouse timeout to a specific assistant answer, because there was no shared identifier between the two systems. That join key is the thing a trace gives you for free.</li>
+        </ul>
+        <p>Four days of senior time, spent proving what was not wrong. The cost of the missing instrumentation was not the incident; it was the investigation.</p>
+      </div>
+    </details>
+  </section>
+
+  <!-- ============ PART 2 ============ -->
+  <section class="section" id="anthropic">
+    <div class="section-kicker">
+      <span class="klabel">Part 2 · the elite case</span>
+      <h2>What it looks like when it happens to the vendor <span class="tag concept">9 min live</span></h2>
+    </div>
+    <p class="lede">The natural objection to Beacon is that Beacon was sloppy. So the most useful published artifact in this course is one where the team is not sloppy by any standard: Anthropic's own postmortem of three issues, September 2025, in which a model provider documents how hard its own degradation was to detect with its own instrumentation.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 488" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Anthropic postmortem September 2025: approximately 30 percent of Claude Code users saw at least one misrouted message, peak 16 percent of Sonnet 4 requests were affected in the worst hour, Bedrock peaked at 0.18 percent and Vertex at under 0.0004 percent.">
+        <style>
+          .apH { font: 700 13px Inter, sans-serif; fill: #1B2230; }
+          .apN { font: 700 12px Inter, sans-serif; fill: #1B2230; }
+          .apS { font: 400 11px Inter, sans-serif; fill: #66707E; }
+          .apV { font: 700 12px Inter, sans-serif; fill: #16305C; }
+          .apX { font: 400 11px Inter, sans-serif; fill: #66707E; }
+          .apR { font: 400 11px Inter, sans-serif; fill: #991B1B; }
+          .apK { font: 600 12.5px Inter, sans-serif; fill: #08323A; }
+        </style>
+
+        <text class="apH" x="24" y="32">One routing bug, four very different pictures  ·  Anthropic postmortem, Sep 2025  [P]</text>
+
+        <text class="apN" x="24" y="76">Claude Code users</text>
+        <text class="apS" x="24" y="92">saw at least one bad message</text>
+        <rect x="250" y="66" width="560" height="20" rx="5" fill="#0C1F3F"/>
+        <text class="apV" x="818" y="80">~30%</text>
+
+        <text class="apN" x="24" y="128">Sonnet 4, first-party API</text>
+        <text class="apS" x="24" y="144">share of requests, worst hour</text>
+        <rect x="250" y="118" width="299" height="20" rx="5" fill="#16305C"/>
+        <text class="apV" x="557" y="132">16%</text>
+
+        <text class="apN" x="24" y="180">Amazon Bedrock</text>
+        <text class="apS" x="24" y="196">share of requests, at peak</text>
+        <rect x="250" y="170" width="4" height="20" rx="2" fill="#0891A6"/>
+        <text class="apV" x="262" y="184">0.18%</text>
+
+        <text class="apN" x="24" y="232">Google Vertex AI</text>
+        <text class="apS" x="24" y="248">share of requests, at peak</text>
+        <rect x="250" y="222" width="3" height="20" rx="1.5" fill="#0891A6"/>
+        <text class="apV" x="262" y="236">&lt;0.0004%</text>
+
+        <text class="apX" x="24" y="282">Bars share one linear scale. The two slivers are the real values, not rendering artefacts.</text>
+        <text class="apX" x="24" y="298">Read the denominators: the first row counts USERS, the other three count REQUESTS.</text>
+
+        <rect x="24" y="312" width="832" height="100" rx="10" fill="#FEF2F2" stroke="#FCA5A5" stroke-width="1.5"/>
+        <text class="apR" x="42" y="336">Why nobody caught it in offline testing, in the vendor's own words: the benchmarks</text>
+        <text class="apR" x="42" y="356">"simply didn't capture the degradation users were reporting" - partly BECAUSE Claude recovers from</text>
+        <text class="apR" x="42" y="376">isolated errors, and the bugs produced different symptoms on different platforms at different rates.</text>
+        <text class="apR" x="42" y="396">If you multi-home, one platform's telemetry does not represent the others.</text>
+
+        <rect x="24" y="428" width="14" height="14" rx="3" fill="#0891A6"/>
+        <text class="apK" x="48" y="440">User reports are a signal. "Our evals are green" is not a rebuttal to them.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - the same bug, measured four ways, from the vendor's published postmortem</figcaption>
+    </figure>
+
+    <div class="callout warn">
+      <strong>The four numbers, and what each one is for</strong>
+      <strong style="display:inline">16%</strong> of Sonnet 4 requests affected at peak in the worst hour is the severity. Approximately <strong style="display:inline">30%</strong> of Claude Code users who made requests in that window had at least one message routed to the wrong server type - that is the same bug counted per person instead of per request, and it is always the larger and more frightening number. <strong style="display:inline">0.18%</strong> on Bedrock and under <strong style="display:inline">0.0004%</strong> on Vertex are the spread, and they carry the operational lesson: if you multi-home across platforms, one platform's telemetry does not represent the others, so a clean dashboard on your primary route is not evidence about your secondary one.
+    </div>
+
+    <details class="card" open>
+      <summary><span class="mode live">Live</span>The sentence to read out loud in your next planning meeting<span class="mini">4 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>The postmortem's explanation of the detection failure is the part worth quoting, because it dismantles the most common argument against production observability. The benchmarks, in their words, <strong>"simply didn't capture the degradation users were reporting"</strong>.</p>
+        <p>Then it goes further and explains why, and the reason is genuinely counter-intuitive. Detection was hard <strong>partly because Claude recovers from isolated errors</strong>. A resilient system absorbs a fault and produces an acceptable answer anyway, which means an aggregate benchmark scored over many requests barely moves. Resilience and detectability pull against each other, and nobody puts that on a roadmap.</p>
+        <p>Add the third factor - the bugs produced different symptoms on different platforms at different rates - and you have the complete anatomy of a failure that a good offline suite cannot see:</p>
+        <ul>
+          <li><strong>It was intermittent</strong>, so any single test run could pass.</li>
+          <li><strong>It was absorbed</strong>, so scored output degraded less than user experience did.</li>
+          <li><strong>It was uneven across routes</strong>, so the population your benchmark samples was not the population being harmed.</li>
+        </ul>
+        <p>Every one of those three is also true of Beacon. The difference in scale between a mid-size company and a frontier lab changed nothing about the shape of the problem, which is the strongest argument available that this is structural rather than a maturity gap you will grow out of.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode self">Self-study</span>What the remediation was, and what it was not<span class="mini">2 min read</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>Read the remediation section carefully, because the direction of travel is the point. The response to benchmarks missing a real degradation was <strong>not</strong> a smarter offline benchmark. It was more sensitive evaluation run continuously on real production traffic, plus better tooling for engineers to look at actual requests.</p>
+        <p>That is the a2 thesis arriving from an unexpected direction: when the best-resourced possible team discovers that offline testing cannot see a class of failure, it buys coverage on production rather than more offline testing. Session a2 turns that into a coverage decision you can actually make, and session a3 into dashboards that answer questions rather than reassure.</p>
+      </div>
+    </details>
+  </section>
+
+  <!-- ============ PART 3 ============ -->
+  <section class="section" id="aircanada">
+    <div class="section-kicker">
+      <span class="klabel">Part 3 · the legal case</span>
+      <h2>When a silent failure becomes a finding of fact <span class="tag concept">8 min live</span></h2>
+    </div>
+    <p class="lede">Beacon cost four days of senior time. The Anthropic issue cost reputation and a public postmortem. The third case is the one that changes how a general counsel hears this conversation, because it establishes that an AI answer is your company's statement, not your vendor's.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 382" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Moffatt v Air Canada 2024 BCCRT 149: the chatbot's bereavement fare claim conflicted with the airline's own published policy, every conventional monitoring signal stayed healthy, and the tribunal found negligent misrepresentation with an award of CAD 650.88.">
+        <style>
+          .acH { font: 700 12.5px Inter, sans-serif; fill: #1B2230; }
+          .acT { font: 700 13px Inter, sans-serif; fill: #1B2230; }
+          .acX { font: 400 11px Inter, sans-serif; fill: #66707E; }
+          .acR { font: 400 11px Inter, sans-serif; fill: #991B1B; }
+          .acW { font: 700 11px Inter, sans-serif; fill: #FFFFFF; }
+          .acC { font: 600 11px Inter, sans-serif; fill: #08323A; }
+          .acK { font: 600 12.5px Inter, sans-serif; fill: #08323A; }
+        </style>
+
+        <text class="acT" x="24" y="32">The failure that leaves no trace at all</text>
+
+        <rect x="24" y="48" width="404" height="70" rx="10" fill="#EDF2FB" stroke="#AFC0E4" stroke-width="1.5"/>
+        <text class="acH" x="42" y="70">Your source of truth</text>
+        <text class="acX" x="42" y="90">The airline's own published bereavement fare policy.</text>
+        <text class="acX" x="42" y="106">Written down. Public. Unambiguous.</text>
+
+        <rect x="452" y="48" width="404" height="70" rx="10" fill="#FEF2F2" stroke="#FCA5A5" stroke-width="1.5"/>
+        <text class="acH" x="470" y="70" fill="#991B1B">What the bot answered</text>
+        <text class="acR" x="470" y="90">A bereavement fare claim the policy did not support.</text>
+        <text class="acR" x="470" y="106">Fluent, plausible, and wrong.</text>
+
+        <rect x="286" y="128" width="308" height="28" rx="8" fill="#0C1F3F"/>
+        <text class="acW" x="304" y="147">these two disagree, nobody checked</text>
+
+        <text class="acX" x="24" y="172">Every signal the monitoring actually had, at the moment of the failure:</text>
+
+        <rect x="24" y="180" width="160" height="34" rx="8" fill="#E4F6F9" stroke="#0891A6" stroke-width="1.5"/>
+        <text class="acC" x="42" y="201">HTTP 200</text>
+        <rect x="192" y="180" width="160" height="34" rx="8" fill="#E4F6F9" stroke="#0891A6" stroke-width="1.5"/>
+        <text class="acC" x="210" y="201">latency normal</text>
+        <rect x="360" y="180" width="160" height="34" rx="8" fill="#E4F6F9" stroke="#0891A6" stroke-width="1.5"/>
+        <text class="acC" x="378" y="201">no exception</text>
+        <rect x="528" y="180" width="160" height="34" rx="8" fill="#E4F6F9" stroke="#0891A6" stroke-width="1.5"/>
+        <text class="acC" x="546" y="201">eval suite green</text>
+        <rect x="696" y="180" width="160" height="34" rx="8" fill="#E4F6F9" stroke="#0891A6" stroke-width="1.5"/>
+        <text class="acC" x="714" y="201">no support ticket</text>
+
+        <rect x="24" y="226" width="832" height="80" rx="10" fill="#FEF2F2" stroke="#FCA5A5" stroke-width="1.5"/>
+        <text class="acR" x="42" y="250">Moffatt v. Air Canada, 2024 BCCRT 149 (14 Feb 2024): the tribunal held the airline liable in negligent</text>
+        <text class="acR" x="42" y="270">misrepresentation for what its chatbot said about bereavement fares. Award: CAD $650.88.  [P] primary</text>
+        <text class="acR" x="42" y="290">The dollar figure is small. The precedent is that a chatbot's answer is the company's own statement.</text>
+
+        <rect x="24" y="322" width="14" height="14" rx="3" fill="#0891A6"/>
+        <text class="acK" x="48" y="334">The signal you needed - bot answer conflicts with source of truth - is the one almost nobody emits.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - a silent failure that produced no error, no alert, and a legal finding</figcaption>
+    </figure>
+
+    <div class="callout warn">
+      <strong>The instrument nobody has</strong>
+      Read the row of green chips again. Every conventional signal was healthy, because the system did exactly what it was built to do: it produced a fluent answer, quickly, without erroring. The only signal that would have caught this is a comparison between what the assistant asserted and what your own documented policy says - and that signal does not exist in any observability product by default, because it requires you to have declared what your source of truth is. It is a coverage decision, and it is a2's subject.
+    </div>
+
+    <details class="card">
+      <summary><span class="mode self">Self-study</span>Two more incidents you will hear cited, and how to cite them honestly<span class="mini">3 min read</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>These two circulate constantly in AI risk decks. Both are useful and neither has a primary postmortem, so they belong in a footnote rather than a headline. Being the person in the room who knows the difference is worth more than the extra example.</p>
+        <h4>Cursor / Anysphere support bot, April 2025 &nbsp;<span class="pill light">[S] secondary</span></h4>
+        <p>The reported sequence is that the support assistant fabricated a single-device policy that did not exist, and users cancelled subscriptions before the company could intervene. <strong>No primary postmortem was found, so treat every detail as secondary reporting.</strong> The reason it is worth carrying anyway is the compound cause: a genuine infrastructure bug in session management, plus an agent confabulating an explanation for it. Your trace in that scenario shows a perfectly healthy agent and a sick auth service, and the assistant's confident wrong explanation is the part that reaches the customer.</p>
+        <h4>Replit agent and a production database, July 2025 &nbsp;<span class="pill light">[S] secondary</span></h4>
+        <p>An agent with production write access is reported to have destroyed data it should never have been able to touch. <strong>No primary postmortem was found, and every record count circulating for this incident is unverified - so do not quote one, including the one you have probably seen.</strong> Cite it for the control lesson only, which is that write scope is a design decision and not an observability problem. Observability tells you what an agent did; it is not what stops it.</p>
+        <div class="callout tip">
+          <strong>The habit this is really teaching</strong>
+          A leader who cites a verified number and openly refuses to cite an unverified one gets believed on both. The moment you quote a dramatic figure that a sceptic can trace to a thread rather than a postmortem, you have handed them the whole argument.
+        </div>
+      </div>
+    </details>
+  </section>
+
+  <!-- ============ EXERCISE 1 ============ -->
+  <section class="section" id="exercise-1">
+    <div class="section-kicker">
+      <span class="klabel">Decision exercise 1 of 2</span>
+      <h2>Replay 09:14 against your own system <span class="tag demo">★ 7 min · table discussion</span></h2>
+    </div>
+    <p class="lede">Do this out loud, in pairs, with somebody who knows the code path. The output is not a plan. It is an honest inventory of what you would and would not have seen, which is the only input a2 needs.</p>
+
+    <div class="steps">
+      <div class="step"><p>Pick one AI feature that a person outside engineering depends on. Name it, name who consumes its output, and name the decision that output feeds. If nobody can name the downstream decision, you have found a different and more interesting problem.</p></div>
+      <div class="step"><p>Walk the Beacon chain against it. Is there a data fetch that can time out? Is there a cache or a fallback anywhere in the path? Is there error handling anywhere that swallows a failure and returns something usable instead? Almost every production AI system answers yes three times, because those are all good engineering.</p></div>
+      <div class="step"><p>Now the load-bearing question: <strong>if that fallback fired at 09:14 this morning, which of your dashboards would have moved?</strong> Not which alert would have fired - which pixel anywhere would be different. Write down the honest answer. For most teams it is none.</p></div>
+      <div class="step"><p>Finally, time the investigation. If a user reported a wrong answer today with no timestamp and no screenshot, how many hours of whose time would it take to reach the mechanism? That number is your current cost per silent failure, and it is the number to bring to a2.</p></div>
+    </div>
+
+    <div class="callout tip">
+      <strong>What to listen for while the room talks</strong>
+      Two answers should stop the discussion. "We would see it in the logs" usually means someone would find it if they already knew what to grep for, which is not detection. "The evals would catch it" is the exact claim the Anthropic postmortem disproves for intermittent, absorbed, route-dependent failures - and if it is said in your room, that is the moment to read the sentence in Part 2 out loud.
+    </div>
+  </section>
+
+  <!-- ============ EXERCISE 2 ============ -->
+  <section class="section" id="exercise-2">
+    <div class="section-kicker">
+      <span class="klabel">Decision exercise 2 of 2</span>
+      <h2>Write the rule for "the user says it is wrong and the evals say it is fine" <span class="tag demo">★ 6 min · write it down</span></h2>
+    </div>
+    <p class="lede">This is the only artifact from today that survives the week. Every organisation resolves this conflict somehow, and the ones that resolve it badly do so by default rather than by decision. Four sentences, agreed in the room, is enough.</p>
+
+    <div class="steps">
+      <div class="step"><p><strong>The threshold.</strong> How many independent user reports about the same AI behaviour, inside what window, constitute a signal that must be investigated even with a green eval suite? Pick an actual number. Two reports in a day is a defensible answer; "when it feels serious" is not.</p></div>
+      <div class="step"><p><strong>The owner.</strong> Who is accountable for reaching a mechanism, not a hypothesis? A report that gets routed to a triage queue and closed as "cannot reproduce" is the failure mode this rule exists to prevent, and non-reproducibility is expected rather than exculpatory.</p></div>
+      <div class="step"><p><strong>The evidence standard.</strong> What must a user report capture to be actionable? Minimum viable is a timestamp, the question asked, and the answer received. Agree today that your product surfaces enough to collect those, because retrofitting it during an incident is how a week disappears.</p></div>
+      <div class="step"><p><strong>The escalation.</strong> What happens when investigation finds nothing because the telemetry does not exist? That outcome must produce an instrumentation ticket rather than a closed report. This is the single sentence that turns today's session into engineering work.</p></div>
+    </div>
+
+    <div class="callout win">
+      <strong>★ The rule, in one line, if you only take one thing</strong>
+      A user report about an AI answer is a signal about the system, and "our evals are green" is not a rebuttal to it. It is a statement that the eval set does not contain the failing case - which is new information about the eval set, not reassurance about production.
+    </div>
+  </section>
+
+  <!-- ============ HOMEWORK ============ -->
+  <section class="section" id="exercise">
+    <div class="section-kicker">
+      <span class="klabel">Homework</span>
+      <h2>Before session a2 - this week <span class="tag exercise">◐ 35-45 min total</span></h2>
+    </div>
+    <ul>
+      <li>Read the Anthropic postmortem end to end, and specifically the detection and remediation sections. It is the single most useful forty minutes a technical leader can spend on this subject, because it is a first-party account of instrumentation failing at a company that has no excuse for it.</li>
+      <li>Bring the number from exercise 1, step 4 to the next session: the hours of senior time your last unexplained AI answer consumed. Coverage is a spend decision, and a2 is much shorter if the room already agrees what the current cost of not having it is.</li>
+      <li>Find out whether any of your AI features can currently be asked "what did this specific user see at this specific minute" and answered in under an hour. If the answer is no for all of them, write down which one it should be yes for first, and why that one.</li>
+      <li>Ask your legal or compliance counterpart one question: does our AI assistant's answer count as a statement by us? Moffatt v. Air Canada is a small tribunal award and a large piece of information, and you want their answer before an incident rather than during one.</li>
+      <li>Optional, and the one that changes minds fastest: retell the Beacon story to a non-engineering executive in ninety seconds and watch which part lands. It is usually the green dashboard, not the stale number.</li>
+    </ul>
+  </section>
+
+  <!-- ============ SOURCES ============ -->
+  <section class="section" id="official">
+    <div class="section-kicker">
+      <span class="klabel">Source material</span>
+      <h2>Official sources covered</h2>
+    </div>
+    <p class="lede">Every published claim on this page is catalogued in this course's source map, marked primary or secondary, and dated. Where only secondary reporting exists, this page says so on the page rather than in a footnote. This session covers:</p>
+    <div class="covered">
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Anthropic postmortem of three recent issues, Sep 2025 - the 16% peak, the ~30% of Claude Code users, the Bedrock and Vertex spread, and why benchmarks missed it</span><span class="note">Part 2 · [P] primary</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Moffatt v. Air Canada, 2024 BCCRT 149 (14 Feb 2024) - negligent misrepresentation, CAD $650.88</span><span class="note">Part 3 · [P] primary</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">The swallowed-exception mechanism: a caught failure that never becomes a span status</span><span class="note">Part 1 · the taxonomy is b6</span></div>
+      <div class="covered-row"><span class="status pill light">◐</span><span class="name">Cursor / Anysphere support bot, Apr 2025 - fabricated policy, compound cause with a real infra bug</span><span class="note">Part 3 card · [S] secondary only, labelled as such</span></div>
+      <div class="covered-row"><span class="status pill light">◐</span><span class="name">Replit agent and a production database, Jul 2025 - cited for the write-scope lesson only</span><span class="note">Part 3 card · [S] no primary postmortem · record counts deliberately omitted</span></div>
+      <div class="covered-row"><span class="status pill light">◐</span><span class="name">The Beacon incident - a constructed teaching case, not a captured production trace</span><span class="note">Part 1 · the mechanism is real; the company is not</span></div>
+      <div class="covered-row"><span class="status pill light">◐</span><span class="name">Coverage as a decision, and the 62% of wall clock nobody could see</span><span class="note">Named here · the whole of a2</span></div>
+      <div class="covered-row"><span class="status pill light">◐</span><span class="name">Why aggregate p95 hid an intermittent failure, and what to put on a dashboard instead</span><span class="note">Not covered by design · a3</span></div>
+    </div>
+  </section>
+
+  <!-- ============ QUIZ ============ -->
+  <section class="section" id="quiz">
+    <div class="section-kicker">
+      <span class="klabel">Check yourself</span>
+      <h2>Three questions before you go 🎯 <span class="tag exercise">◐ 90 seconds</span></h2>
+    </div>
+    <div class="quiz-q" data-answer="2">
+      <p class="qtext">1 · Beacon's p95 latency dashboard stayed green through the entire incident. What is the correct conclusion?</p>
+      <button class="qopt" type="button">A · The latency instrumentation was broken and should be replaced</button>
+      <button class="qopt" type="button">B · Latency was never a useful signal and should be dropped from the dashboard</button>
+      <button class="qopt" type="button">C · The signal was accurate and irrelevant - serving a stale cache entry is fast, so degradation made latency better rather than worse</button>
+      <button class="qopt" type="button">D · The dashboard needed a tighter threshold</button>
+      <p class="qwhy">This is the trap that costs teams the most time. Nothing was broken about the measurement, so no amount of retuning it would have helped. The failure lived entirely outside what was being measured, and the fallback path was genuinely faster than the correct path - which means a tighter latency threshold would have made the incident less visible, not more. A monitoring system can only be wrong about things it measures.</p>
+    </div>
+    <div class="quiz-q" data-answer="1">
+      <p class="qtext">2 · Anthropic's postmortem reports that benchmarks "simply didn't capture the degradation users were reporting". Which detail makes that most uncomfortable for your own eval strategy?</p>
+      <button class="qopt" type="button">A · The peak impact was 16% of Sonnet 4 requests in the worst hour</button>
+      <button class="qopt" type="button">B · Detection was hard partly BECAUSE the model recovers from isolated errors - so resilience actively suppresses the aggregate signal your benchmark reads</button>
+      <button class="qopt" type="button">C · Bedrock peaked at 0.18% while Vertex stayed under 0.0004%</button>
+      <button class="qopt" type="button">D · The remediation involved more production evaluation</button>
+      <button class="qopt" type="button">E · Approximately 30% of Claude Code users saw at least one misrouted message</button>
+      <p class="qwhy">All five are real and all five are on the page, but B is the structural one. A resilient system absorbs a fault and still produces an acceptable answer, so a score aggregated over many requests barely moves while individual users are visibly harmed. Resilience and detectability trade against each other, and nobody schedules that trade-off. The platform spread in C carries the other operational lesson: if you multi-home, one platform's telemetry does not represent the others.</p>
+    </div>
+    <div class="quiz-q" data-answer="3">
+      <p class="qtext">3 · In Moffatt v. Air Canada, which signal would actually have caught the failure before the tribunal did?</p>
+      <button class="qopt" type="button">A · Error rate, since a hallucination is a fault</button>
+      <button class="qopt" type="button">B · p99 latency on the chatbot endpoint</button>
+      <button class="qopt" type="button">C · A stricter refusal threshold on the model</button>
+      <button class="qopt" type="button">D · A comparison between what the bot asserted and the company's own documented policy - which no product emits by default, because it requires you to declare your source of truth</button>
+      <p class="qwhy">The response was fast, successful and unexceptional by every conventional measure, which is precisely why the case matters: a hallucination contradicting your own published policy is a legally actionable silent failure. The signal you needed is "bot answer conflicts with source of truth", and almost nobody instruments it - not because it is technically hard, but because it requires somebody to decide what the source of truth is and where it lives. That decision is coverage, and coverage is session a2.</p>
+    </div>
+    <p class="quiz-score"></p>
+  </section>
+
+  <!-- ============ CHEAT SHEET ============ -->
+  <section class="cheat" id="cheatsheet">
+    <h3>Leader session 1 cheat sheet <span>· pin this</span></h3>
+    <div class="grid-2">
+      <div class="cheat-item"><b>The one sentence</b><span>Evals tell you whether it works. Observability tells you what actually happened. Neither substitutes for the other.</span></div>
+      <div class="cheat-item"><b>The trace is the receipt</b><span>An eval score is a claim about a population you built. A trace is the record of one request one person made at 09:14.</span></div>
+      <div class="cheat-item"><b>Beacon, in one line</b><span>A swallowed warehouse timeout fell back to a 19.4-hour-old cache. Green dashboard, wrong numbers, four days to find.</span></div>
+      <div class="cheat-item"><b>Green is not a lie</b><span>A monitoring system can only be wrong about things it measures. Beacon's failure lived between the measurements.</span></div>
+      <div class="cheat-item"><b>Success is not a status code</b><span>HTTP 200 covers empty answers, refusals, truncations and confident fabrications. Assert on output, not status.</span></div>
+      <div class="cheat-item"><b>Resilience hides degradation</b><span>Anthropic: benchmarks missed a bug affecting 16% of requests at peak, partly because the model recovers from isolated errors.</span></div>
+      <div class="cheat-item"><b>Multi-homing splits your telemetry</b><span>Same bug: 16% first-party, 0.18% Bedrock, under 0.0004% Vertex. A clean primary route proves nothing about the others.</span></div>
+      <div class="cheat-item"><b>The rebuttal that is not one</b><span>"Our evals are green" means the failing case is not in the eval set. That is news about the eval set, not about production.</span></div>
+    </div>
+  </section>
+
+  <footer class="pagefoot">
+    <span>Leader session 1 of 6 · learn-ai-observability-with-phoebe · by Phoebe Fu &nbsp;·&nbsp; 📚 <a href="https://phoebefu6.github.io/learn-with-phoebe/">Learn with Phoebe ↗</a></span>
+    <span><a href="../index.html">← Course home</a> &nbsp;·&nbsp; <a href="a2-what-to-instrument.html">Next: What to instrument →</a></span>
+  </footer>
+
+</main>
+
+<script src="../assets/app.js?v=2"></script>
+</body>
+</html>

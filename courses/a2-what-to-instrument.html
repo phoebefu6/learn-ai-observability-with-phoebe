@@ -1,0 +1,525 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Leader session 2 · What to instrument before you need it - learn ai observability with phoebe</title>
+<link rel="stylesheet" href="../assets/style.css?v=2">
+</head>
+<body>
+
+<div class="toolbar">
+  <div class="wrap">
+    <span class="crumb"><a href="../index.html">learn-ai-observability-with-phoebe</a> / Leader session 2 of 6</span>
+    <button class="btn" id="toggle-all" type="button">Expand all</button>
+    <button class="btn primary" id="zoom-toggle" type="button">Projector zoom: off</button>
+  </div>
+</div>
+
+<header class="masthead">
+  <div class="wrap">
+    <div class="eyebrow">Learn AI Observability with Phoebe · Leader track · Session 2 of 6</div>
+    <h1>What to instrument before you need it: <span class="accent">coverage is a decision, not a technical problem</span></h1>
+    <p class="sub">Nobody in your organisation decided not to instrument retrieval. That is exactly the problem. Coverage arrives as a default - you get whatever the vendor SDK happened to wrap, and the parts you get free are the parts least likely to be your bug. This session turns coverage from an accident into a decision with an owner, a cost and a measurable value, so that the next incident is a twenty minute investigation instead of a four day one.</p>
+    <div class="chip-row">
+      <span class="chip level">🟢 Leader track</span>
+      <span class="chip audience">Heads of engineering · platform leads · SRE managers</span>
+      <span class="chip time">45 min</span>
+    </div>
+    <div class="agenda">
+      <span class="a1" style="flex:1">0-3 · Recap</span>
+      <span class="a2" style="flex:4">3-19 · The asymmetry + the 62%</span>
+      <span class="a3" style="flex:4">19-34 · Coverage as a measurable property</span>
+      <span class="a4" style="flex:3">34-45 · Decisions + Q&amp;A</span>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <!-- ============ INTRO ============ -->
+  <section class="section" id="intro">
+    <div class="section-kicker">
+      <span class="klabel">Part 0</span>
+      <h2>Where session a1 left you, and the single move that follows from it</h2>
+    </div>
+    <p class="lede">Session a1 ended with a number: the hours of senior time your last unexplained AI answer consumed. Beacon's was four days, spent proving what was not wrong. Anthropic's postmortem showed the same shape at a company with no resourcing excuse. Today has one job, which is turning "we should see more" into a written list of what specifically, owned by a named person, with the cost stated honestly rather than hidden.</p>
+    <div class="legend">
+      <span class="pill solid">Live - presented in session</span>
+      <span class="pill light">Self-study - read after class</span>
+      <span class="pill inkpill">Official sources covered</span>
+    </div>
+    <div class="callout win">
+      <strong>★ What you walk out with today</strong>
+      Why the instrumentation you get for free is the instrumentation you need least, the specific wrong conclusion each missing instrument makes your team reach, one number that reframes the whole conversation (62% of a run's wall clock inside no span at all), a definition of coverage your monitoring can check by itself, and an honest sentence about what coverage costs so nobody feels sold to.
+    </div>
+    <div class="callout tip">
+      <strong>The framing that gets this funded</strong>
+      Coverage is not a monitoring line item. It is the difference between an incident that ends in a mechanism and an incident that ends in a hypothesis. The bill for poor coverage is never paid by the observability budget - it is paid in senior engineering weeks, in wrong model migrations, and in the specific credibility cost of telling an executive "we cannot explain what happened".
+    </div>
+  </section>
+
+  <!-- ============ PART 1 ============ -->
+  <section class="section" id="asymmetry">
+    <div class="section-kicker">
+      <span class="klabel">Part 1 · the asymmetry</span>
+      <h2>You get the model calls free, and the model calls are rarely the bug <span class="tag concept">9 min live</span></h2>
+    </div>
+    <p class="lede">There is a structural reason your traces look the way they do, and it has nothing to do with your team's judgement. Auto-instrumentation wraps what the vendor ships, and the vendor ships the model client. So the model call is instrumented by default, everywhere, in every stack - and it is the layer that fails least often.</p>
+
+    <div class="grid-2">
+      <div class="d-card">
+        <h4><span class="lead-letter">A</span> · What arrives for free</h4>
+        <p>The model calls. Which model, how many tokens, how long it took, what finished it. Genuinely useful, genuinely well covered, and almost never the thing that broke.</p>
+      </div>
+      <div class="d-card">
+        <h4><span class="lead-letter">B</span> · What needs a decision</h4>
+        <p>Retrieval. Caching. Tool arguments. Retry counts. Swallowed exceptions. Guardrail outcomes. Every one of these is where production actually breaks, and every one requires somebody to choose it.</p>
+      </div>
+    </div>
+
+    <p>That is the whole asymmetry, and it explains a pattern you have probably seen without naming: teams with real observability spend on their AI stack, whose first serious incident is still unreadable. They have excellent coverage of the safest layer. Nobody chose that. It was the default, and defaults are decisions that nobody signed.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 352" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="A 6.8 second run: the team's traces showed only two model call spans totalling 2.2 seconds, leaving 4.6 seconds inside no span at all. Fully instrumented, the retrieval step alone accounts for 4.2 seconds, or 62 percent of the wall clock.">
+        <style>
+          .waT { font: 700 13px Inter, sans-serif; fill: #1B2230; }
+          .waL { font: 700 11px Inter, sans-serif; fill: #1B2230; }
+          .waM { font: 400 11px ui-monospace, Menlo, monospace; fill: #FFFFFF; }
+          .waR { font: 400 11px Inter, sans-serif; fill: #991B1B; }
+          .waX { font: 400 11px Inter, sans-serif; fill: #66707E; }
+          .waC { font: 400 11px Inter, sans-serif; fill: #08323A; }
+          .waK { font: 600 12.5px Inter, sans-serif; fill: #08323A; }
+        </style>
+
+        <text class="waT" x="24" y="32">One 6.8 second run, and the 4.2 seconds nobody could see</text>
+
+        <text class="waL" x="24" y="58">What the team's traces showed - three spans, and all of them model calls or the root</text>
+        <rect x="24" y="66" width="131" height="34" rx="7" fill="#16305C"/>
+        <text class="waM" x="38" y="87">chat 1.1s</text>
+        <rect x="155" y="66" width="131" height="34" rx="7" fill="#16305C"/>
+        <text class="waM" x="169" y="87">chat 1.1s</text>
+        <rect x="286" y="66" width="546" height="34" rx="7" fill="#FEF2F2" stroke="#FCA5A5" stroke-width="1.5"/>
+        <text class="waR" x="304" y="87">4.6 seconds of real work, inside no span at all</text>
+
+        <text class="waL" x="24" y="126">What was actually happening - the same 6.8 seconds, fully described</text>
+        <rect x="24" y="134" width="131" height="34" rx="7" fill="#16305C"/>
+        <text class="waM" x="38" y="155">chat 1.1s</text>
+        <rect x="155" y="134" width="24" height="34" rx="4" fill="#3F62A8"/>
+        <rect x="179" y="134" width="499" height="34" rx="7" fill="#0891A6"/>
+        <text class="waM" x="193" y="155">retrieve_metrics 4.2s   RETRIEVER</text>
+        <rect x="678" y="134" width="131" height="34" rx="7" fill="#16305C"/>
+        <text class="waM" x="692" y="155">chat 1.1s</text>
+        <rect x="809" y="134" width="23" height="34" rx="4" fill="#C7CFDA"/>
+
+        <text class="waX" x="24" y="186">chat 1.1s  ·  tool 0.2s  ·  retrieve_metrics 4.2s  ·  chat 1.1s  ·  un-spanned glue 0.2s  =  6.8s total</text>
+
+        <rect x="24" y="200" width="832" height="76" rx="10" fill="#E4F6F9" stroke="#0891A6" stroke-width="1.5"/>
+        <text class="waC" x="42" y="224">The retrieval span alone is 4.2 seconds of 6.8 = 62% of the wall clock, and it was invisible for a week.</text>
+        <text class="waC" x="42" y="244">Nothing about the system changed when it appeared. Only what the system reported about itself changed.</text>
+        <text class="waC" x="42" y="264">Coverage is the only variable in this picture that a leader controls directly.</text>
+
+        <rect x="24" y="292" width="14" height="14" rx="3" fill="#0891A6"/>
+        <text class="waK" x="48" y="304">You cannot triage a step that emits nothing. Uninstrumented time is not slow; it is invisible.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - the same run, before and after somebody decided retrieval was worth a span</figcaption>
+    </figure>
+
+    <div class="callout warn">
+      <strong>The 62%, and why it is the number to quote</strong>
+      In the Beacon run, the retrieval step is 4.2 seconds of a 6.8 second wall clock. That is 62% of everything the user waited for, sitting inside no span the team emitted. Before retrieval was instrumented, only 32.4% of the run was accounted for by any span at all; adding tool spans took that to 38.2%; adding the retrieval span took it to 100% and made a four-second step appear out of nowhere. The system was identical in all three cases. <strong>The arithmetic here is computed from the course's trace simulator, which is a constructed incident with real arithmetic - not a capture from a live system.</strong>
+    </div>
+
+    <details class="card" open>
+      <summary><span class="mode live">Live</span>The one metric that turns this into a standing question<span class="mini">4 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>There is a single derived number that makes coverage legible to people who will never open a trace: <strong>unaccounted time</strong>. Take the total duration of a request, subtract the durations of every span you actually emit, and express the remainder as a percentage.</p>
+        <table class="clean">
+          <tr><th>Unaccounted time</th><th>What it means operationally</th></tr>
+          <tr><td><strong>Above 50%</strong></td><td>Most of what your users wait for is undescribed. Any incident in that region will be diagnosed by reading code, on a deadline, by your most expensive people</td></tr>
+          <tr><td><strong>20 to 50%</strong></td><td>You can localise a problem to a region but not to a step. Investigations end in plausible hypotheses rather than mechanisms</td></tr>
+          <tr><td><strong>Under 10%</strong></td><td>Duration questions are answerable off the waterfall. Attribute coverage becomes the next constraint, and that is a different decision</td></tr>
+        </table>
+        <p>Ask for this number once per quarter, per AI feature. It requires no new vocabulary from the person answering, it cannot be gamed without genuinely improving coverage, and it is one of very few observability metrics that a non-engineer can interpret unaided. Session b1 walks the builder track through computing it.</p>
+      </div>
+    </details>
+  </section>
+
+  <!-- ============ PART 2 ============ -->
+  <section class="section" id="hides">
+    <div class="section-kicker">
+      <span class="klabel">Part 2 · the cost of each gap</span>
+      <h2>What each missing instrument makes your team believe <span class="tag concept">8 min live</span></h2>
+    </div>
+    <p class="lede">A coverage gap does not present as an absence. It presents as a confident wrong answer, arrived at by competent people reasoning correctly from incomplete evidence. This is the table to bring to a prioritisation meeting, because each row is a specific week your organisation can lose.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 418" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Five missing instruments and the wrong conclusion each one produces: no retrieval span reads as a hallucination, no retry counter reads as an expensive model, no cache read and create split breaks the cost model, no guardrail signal reads as easy questions, and a swallowed exception reads as success.">
+        <style>
+          .miH { font: 700 12px Inter, sans-serif; fill: #1B2230; }
+          .miT { font: 700 12px Inter, sans-serif; fill: #FFFFFF; }
+          .miX { font: 400 11px Inter, sans-serif; fill: #66707E; }
+          .miR { font: 400 11px Inter, sans-serif; fill: #991B1B; }
+          .miN { font: 400 11px Inter, sans-serif; fill: #66707E; }
+          .miK { font: 600 12.5px Inter, sans-serif; fill: #08323A; }
+        </style>
+
+        <text class="miH" x="24" y="42">Instrument you skipped</text>
+        <text class="miH" x="246" y="42">What you will conclude</text>
+        <text class="miH" x="556" y="42">What is actually true</text>
+
+        <rect x="24" y="54" width="210" height="44" rx="9" fill="#0C1F3F"/>
+        <text class="miT" x="42" y="81">Retrieval span</text>
+        <rect x="246" y="54" width="298" height="44" rx="9" fill="#EDF2FB" stroke="#AFC0E4" stroke-width="1.5"/>
+        <text class="miX" x="264" y="81">"the model hallucinated"</text>
+        <rect x="556" y="54" width="300" height="44" rx="9" fill="#FEF2F2" stroke="#FCA5A5" stroke-width="1.5"/>
+        <text class="miR" x="574" y="81">it had no grounding to work from</text>
+
+        <rect x="24" y="106" width="210" height="44" rx="9" fill="#16305C"/>
+        <text class="miT" x="42" y="133">Retry counter</text>
+        <rect x="246" y="106" width="298" height="44" rx="9" fill="#EDF2FB" stroke="#AFC0E4" stroke-width="1.5"/>
+        <text class="miX" x="264" y="133">"this model call is expensive"</text>
+        <rect x="556" y="106" width="300" height="44" rx="9" fill="#FEF2F2" stroke="#FCA5A5" stroke-width="1.5"/>
+        <text class="miR" x="574" y="133">you paid for the same call 4 times</text>
+
+        <rect x="24" y="158" width="210" height="44" rx="9" fill="#3F62A8"/>
+        <text class="miT" x="42" y="185">Cache read/create split</text>
+        <rect x="246" y="158" width="298" height="44" rx="9" fill="#EDF2FB" stroke="#AFC0E4" stroke-width="1.5"/>
+        <text class="miX" x="264" y="185">"our cost per token is stable"</text>
+        <rect x="556" y="158" width="300" height="44" rx="9" fill="#FEF2F2" stroke="#FCA5A5" stroke-width="1.5"/>
+        <text class="miR" x="574" y="185">the cost model is off by up to 12.5x</text>
+
+        <rect x="24" y="210" width="210" height="44" rx="9" fill="#3F62A8"/>
+        <text class="miT" x="42" y="237">Guardrail pass / trip</text>
+        <rect x="246" y="210" width="298" height="44" rx="9" fill="#EDF2FB" stroke="#AFC0E4" stroke-width="1.5"/>
+        <text class="miX" x="264" y="237">"users only ask easy questions"</text>
+        <rect x="556" y="210" width="300" height="44" rx="9" fill="#FEF2F2" stroke="#FCA5A5" stroke-width="1.5"/>
+        <text class="miR" x="574" y="237">you quietly refuse 6% of them</text>
+
+        <rect x="24" y="262" width="210" height="44" rx="9" fill="#0891A6"/>
+        <text class="miT" x="42" y="289">Swallowed exception</text>
+        <rect x="246" y="262" width="298" height="44" rx="9" fill="#EDF2FB" stroke="#AFC0E4" stroke-width="1.5"/>
+        <text class="miX" x="264" y="289">"the request succeeded"</text>
+        <rect x="556" y="262" width="300" height="44" rx="9" fill="#FEF2F2" stroke="#FCA5A5" stroke-width="1.5"/>
+        <text class="miR" x="574" y="289">the fallback served 19.4h-old data</text>
+
+        <text class="miN" x="24" y="330">The 6% refusal rate is the constructed Beacon case, not a published statistic. The 12.5x is arithmetic on</text>
+        <text class="miN" x="24" y="346">Anthropic's published 1.25x cache-write and 0.1x cache-read multipliers, read 2026-08-13.</text>
+
+        <rect x="24" y="360" width="832" height="44" rx="10" fill="#FFFFFF" stroke="#C7CFDA" stroke-width="1.5"/>
+        <rect x="42" y="374" width="14" height="14" rx="3" fill="#0891A6"/>
+        <text class="miK" x="66" y="386">Every row is a wrong conclusion your team can reach with a completely green dashboard.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - five coverage gaps, and the confident wrong answer each one produces</figcaption>
+    </figure>
+
+    <details class="card" open>
+      <summary><span class="mode live">Live</span>Row by row, with the decision each one implies<span class="mini">5 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <table class="clean">
+          <tr><th>Gap</th><th>The wrong turn it causes</th><th>What it costs before you notice</th></tr>
+          <tr><td><strong>No retrieval span</strong></td><td>"The model hallucinated" - so you change model, or tighten the prompt, or add a guardrail. The model was fine. It had nothing to ground on</td><td>A model migration. Weeks, plus a confident negative result that means nothing</td></tr>
+          <tr><td><strong>No retry counter</strong></td><td>"This model call is expensive" - so the cost conversation becomes a pricing conversation. It was one call, billed four times</td><td>A vendor negotiation aimed at the wrong number, while the retry storm continues</td></tr>
+          <tr><td><strong>No cache read versus create split</strong></td><td>"Our cost per token is stable" - so nobody looks. A cache write and a cache read are priced very differently, and one number cannot represent both</td><td>A cost model wrong by a large multiple, in whichever direction flatters you</td></tr>
+          <tr><td><strong>No guardrail outcome</strong></td><td>"Users only ask easy questions" - so the roadmap optimises for the questions you can see. The hard ones were refused, silently, and never reached a log</td><td>A product strategy built on a survivorship-biased view of demand</td></tr>
+          <tr><td><strong>No status on a caught exception</strong></td><td>"The request succeeded" - because it did, from the caller's point of view. The fallback path ran and nobody was told</td><td>Beacon. Four days, and a week of executives acting on last Monday's numbers</td></tr>
+        </table>
+        <p><strong>The 12.5x, stated precisely so nobody over-claims it.</strong> Anthropic's published prompt caching multipliers are 1.25x base input cost for a five-minute cache write and 0.1x for a cache read, read 2026-08-13. The ratio between those two token classes is therefore 12.5x. If your telemetry reports one undifferentiated input token count, your per-token cost model can be wrong by that factor for the tokens in question. This is arithmetic on published multipliers, not a published statistic, and it is a leading indicator rather than a bill - session a4 does the full cost attribution and b4 does it per span.</p>
+        <p><strong>The 6%, stated precisely too.</strong> It is the refusal rate in the Beacon teaching case, chosen to be unremarkable. Any real number is your own to measure, and the reason to measure it is that a refusal typically returns as a successful response, so it is invisible to error-rate alerting by construction. Session a5 makes refusal rate a first-class alerting signal.</p>
+      </div>
+    </details>
+
+    <div class="callout example">
+      <span class="ex-pill">Elite case · [P] primary</span>
+      <p><strong>The best-resourced possible team ran green evals and missed a bug affecting 16% of requests at peak.</strong> In Anthropic's published postmortem of three issues, September 2025, a context-window routing error affected a peak of 16% of Sonnet 4 requests in the worst hour, and approximately 30% of Claude Code users who made requests in that window had at least one message routed to the wrong server type. The benchmarks, in their words, "simply didn't capture the degradation users were reporting".</p>
+      <p>Two details make this the most useful case available for a coverage argument:</p>
+      <ul>
+        <li><strong>The reason detection failed was partly a virtue.</strong> Claude recovers from isolated errors, so an aggregate score over many requests barely moved while individual users were visibly harmed. Resilience suppresses exactly the signal an offline benchmark reads.</li>
+        <li><strong>The remediation went towards production coverage, not smarter offline testing.</strong> More sensitive evaluation on real production traffic, and better tooling for engineers to inspect real requests. When the team with the deepest possible eval investment finds a failure class its benchmarks cannot see, it buys coverage on production traffic instead of buying more benchmarks.</li>
+      </ul>
+      <p>Use this in exactly one way and no further: it is evidence that offline testing has a structural blind spot for intermittent, absorbed, route-dependent failures. It is not a benchmark number, not a guarantee about any product, and not a claim about what your own rates will be. The Bedrock and Vertex figures - 0.18% and under 0.0004% at peak - are the reminder that if you multi-home, one platform's telemetry does not represent the others.</p>
+    </div>
+  </section>
+
+  <!-- ============ PART 3 ============ -->
+  <section class="section" id="measurable">
+    <div class="section-kicker">
+      <span class="klabel">Part 3 · coverage as a number</span>
+      <h2>Coverage is a measurable property, not a feeling <span class="tag concept">8 min live</span></h2>
+    </div>
+    <p class="lede">Everything above is an argument. This is the part that turns it into an operating practice, and it is the most under-used idea in AI observability: write down the list of span types a healthy trace of this feature is supposed to contain, then let your monitoring alert when a trace arrives without one of them.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 402" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="An expected step list of seven span types compared against a trace that arrived with only four: retrieval, database query and cache read are missing, which a monitoring system can flag as a coverage incident without any human reading the trace.">
+        <style>
+          .cvT { font: 700 13px Inter, sans-serif; fill: #1B2230; }
+          .cvH { font: 700 12px Inter, sans-serif; fill: #1B2230; }
+          .cvM { font: 400 11px ui-monospace, Menlo, monospace; fill: #16305C; }
+          .cvG { font: 400 11px ui-monospace, Menlo, monospace; fill: #08323A; }
+          .cvB { font: 400 11px ui-monospace, Menlo, monospace; fill: #991B1B; }
+          .cvA { font: 700 12px Inter, sans-serif; fill: #991B1B; }
+          .cvR { font: 400 11px Inter, sans-serif; fill: #991B1B; }
+          .cvX { font: 400 11px Inter, sans-serif; fill: #66707E; }
+          .cvK { font: 600 12.5px Inter, sans-serif; fill: #08323A; }
+        </style>
+
+        <text class="cvT" x="24" y="32">Declare the expected steps once, and the gap becomes machine-detectable</text>
+
+        <text class="cvH" x="24" y="56">The expected step list</text>
+        <text class="cvH" x="336" y="56">A trace that arrived at 09:14</text>
+        <text class="cvH" x="648" y="56">The alert</text>
+
+        <rect x="24" y="66" width="280" height="26" rx="6" fill="#EDF2FB" stroke="#AFC0E4" stroke-width="1"/>
+        <text class="cvM" x="40" y="84">invoke_agent</text>
+        <rect x="336" y="66" width="280" height="26" rx="6" fill="#E4F6F9" stroke="#0891A6" stroke-width="1"/>
+        <text class="cvG" x="352" y="84">invoke_agent   present</text>
+
+        <rect x="24" y="98" width="280" height="26" rx="6" fill="#EDF2FB" stroke="#AFC0E4" stroke-width="1"/>
+        <text class="cvM" x="40" y="116">plan</text>
+        <rect x="336" y="98" width="280" height="26" rx="6" fill="#E4F6F9" stroke="#0891A6" stroke-width="1"/>
+        <text class="cvG" x="352" y="116">plan           present</text>
+
+        <rect x="24" y="130" width="280" height="26" rx="6" fill="#EDF2FB" stroke="#AFC0E4" stroke-width="1"/>
+        <text class="cvM" x="40" y="148">chat</text>
+        <rect x="336" y="130" width="280" height="26" rx="6" fill="#E4F6F9" stroke="#0891A6" stroke-width="1"/>
+        <text class="cvG" x="352" y="148">chat           present</text>
+
+        <rect x="24" y="162" width="280" height="26" rx="6" fill="#EDF2FB" stroke="#AFC0E4" stroke-width="1"/>
+        <text class="cvM" x="40" y="180">execute_tool</text>
+        <rect x="336" y="162" width="280" height="26" rx="6" fill="#E4F6F9" stroke="#0891A6" stroke-width="1"/>
+        <text class="cvG" x="352" y="180">execute_tool   present</text>
+
+        <rect x="24" y="194" width="280" height="26" rx="6" fill="#EDF2FB" stroke="#AFC0E4" stroke-width="1"/>
+        <text class="cvM" x="40" y="212">retrieval</text>
+        <rect x="336" y="194" width="280" height="26" rx="6" fill="#FEF2F2" stroke="#FCA5A5" stroke-width="1"/>
+        <text class="cvB" x="352" y="212">retrieval      MISSING</text>
+
+        <rect x="24" y="226" width="280" height="26" rx="6" fill="#EDF2FB" stroke="#AFC0E4" stroke-width="1"/>
+        <text class="cvM" x="40" y="244">db.query</text>
+        <rect x="336" y="226" width="280" height="26" rx="6" fill="#FEF2F2" stroke="#FCA5A5" stroke-width="1"/>
+        <text class="cvB" x="352" y="244">db.query       MISSING</text>
+
+        <rect x="24" y="258" width="280" height="26" rx="6" fill="#EDF2FB" stroke="#AFC0E4" stroke-width="1"/>
+        <text class="cvM" x="40" y="276">cache.get</text>
+        <rect x="336" y="258" width="280" height="26" rx="6" fill="#FEF2F2" stroke="#FCA5A5" stroke-width="1"/>
+        <text class="cvB" x="352" y="276">cache.get      MISSING</text>
+
+        <rect x="648" y="66" width="208" height="218" rx="10" fill="#FEF2F2" stroke="#FCA5A5" stroke-width="1.5"/>
+        <text class="cvA" x="666" y="92">COVERAGE INCIDENT</text>
+        <text class="cvR" x="666" y="116">4 of 7 expected span</text>
+        <text class="cvR" x="666" y="132">types present.</text>
+        <text class="cvR" x="666" y="156">This is a ticket, not a</text>
+        <text class="cvR" x="666" y="172">hunch. It fires without</text>
+        <text class="cvR" x="666" y="188">anyone reading a trace.</text>
+        <text class="cvR" x="666" y="212">No model and no eval</text>
+        <text class="cvR" x="666" y="228">can produce this alert.</text>
+        <text class="cvR" x="666" y="252">The three missing rows</text>
+        <text class="cvR" x="666" y="268">ARE the incident.</text>
+
+        <rect x="24" y="300" width="832" height="64" rx="10" fill="#FFFFFF" stroke="#C7CFDA" stroke-width="1.5"/>
+        <text class="cvX" x="42" y="322">The list is the decision. Once the expected step list exists, a trace with four spans where the design says</text>
+        <text class="cvX" x="42" y="342">seven is a machine-detectable coverage incident - the rare alert that fires before a user is harmed.</text>
+
+        <rect x="24" y="374" width="14" height="14" rx="3" fill="#0891A6"/>
+        <text class="cvK" x="48" y="386">Coverage stops being a vibe the moment somebody writes the expected step list down.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - the expected step list, the trace that arrived, and the alert that writes itself</figcaption>
+    </figure>
+
+    <div class="callout warn">
+      <strong>Why this is the highest-leverage ask on the page</strong>
+      Every other signal in this course tells you about a request that already went wrong. Instrumentation coverage is the one signal that tells you your ability to diagnose has degraded, before the incident that needs it. It also degrades silently and constantly, for entirely mundane reasons: a dependency upgrade drops an auto-instrumentation hook, a refactor moves a call outside its span, a new code path ships without the wrapper, a sampling change quietly removes a span type from view. None of those produce an error. All of them produce a trace with fewer span types than the design says.
+    </div>
+
+    <details class="card">
+      <summary><span class="mode self">Self-study</span>How to write an expected step list that survives contact with reality<span class="mini">4 min read</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>The failure mode of this practice is a list so detailed that it is wrong within a fortnight and gets switched off. Four rules keep it alive.</p>
+        <ul>
+          <li><strong>List span types, not span counts.</strong> An agent loop legitimately runs three tool calls today and eleven tomorrow, so counts flap. "At least one retrieval span" is stable across both. Runaway loops are caught by a different signal, which is a5's subject.</li>
+          <li><strong>One list per feature, not one per service.</strong> The expected shape of a document assistant is not the expected shape of a routing classifier. A single global list is either so loose it catches nothing, or so tight it fires constantly.</li>
+          <li><strong>Version the list with the feature.</strong> When a step is deliberately removed, the list changes in the same change set. If updating the list is a separate ticket, it will lag, and a lagging list generates false alerts until somebody mutes it permanently.</li>
+          <li><strong>Alert as a rate, not per trace.</strong> One trace missing a span type can be legitimate - a cache hit path may genuinely skip the database. A sustained share of traces missing an expected type is the signal. Per-trace alerting on a non-deterministic system is how you build alert fatigue, and a5 is entirely about not doing that.</li>
+        </ul>
+        <p>Written this way, the artifact is short. Seven lines per feature, owned by the team that owns the feature, reviewed when the feature changes. It is the cheapest thing on this page and the only one that catches its own decay.</p>
+      </div>
+    </details>
+  </section>
+
+  <!-- ============ PART 4 ============ -->
+  <section class="section" id="cost">
+    <div class="section-kicker">
+      <span class="klabel">Part 4 · the honest part</span>
+      <h2>What coverage costs, said out loud <span class="tag concept">5 min live</span></h2>
+    </div>
+    <p class="lede">A session that only argues for more instrumentation is a sales pitch, and your engineers will hear it as one. Coverage is not free, the costs are real, and naming them is what makes the ask credible.</p>
+
+    <div class="grid-2">
+      <div class="d-card">
+        <h4><span class="lead-letter">1</span> · Storage and ingest</h4>
+        <p>More spans per trace means more bytes retained and, on volume-priced platforms, a larger bill. Content capture is the expensive part by a wide margin, and it is a separate decision from structural coverage.</p>
+      </div>
+      <div class="d-card">
+        <h4><span class="lead-letter">2</span> · Engineering time</h4>
+        <p>The spans you get free cost nothing. Retrieval, cache and tool-argument coverage is deliberate work by the team that owns the code, and it competes with the roadmap.</p>
+      </div>
+      <div class="d-card">
+        <h4><span class="lead-letter">3</span> · Cardinality</h4>
+        <p>Rich attributes on spans are cheap. The same attributes used as metric dimensions multiply time series and can dominate cost. The two look identical to a stakeholder and are priced very differently.</p>
+      </div>
+      <div class="d-card">
+        <h4><span class="lead-letter">4</span> · Privacy exposure</h4>
+        <p>Structural coverage - durations, counts, statuses - carries little risk. Capturing prompts, tool arguments and retrieved documents creates legal and security obligations. Do not bundle the two asks together.</p>
+      </div>
+    </div>
+
+    <div class="callout tip">
+      <strong>Where the numbers live</strong>
+      This session deliberately does not price coverage, because a price without arithmetic in front of it is a slogan. <strong>Session b7 prices it</strong> - sampling, retention volumes and the cardinality mechanism, with the trade computed rather than asserted. Session a4 handles cost attribution as a business problem, a5 handles what to alert on so extra coverage does not become extra noise, and a6 handles retention, lock-in and the decision about storing prompts. The one thing to carry out of today is the shape of the trade: <strong>metadata coverage is cheap and high-value, content capture is expensive and situational, and treating them as one budget line is how good proposals get rejected.</strong>
+    </div>
+
+    <details class="card">
+      <summary><span class="mode self">Self-study</span>The trap where more coverage buys nothing<span class="mini">3 min read</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>The course's own trace simulator makes this point against itself, and it is worth knowing before you approve a budget. Adding coverage improves diagnosis sharply up to a point: structural spans, then attributes, then the database and cache children, then error propagation, then identifiers and token counts. At that point every diagnostic question about the Beacon incident is answerable.</p>
+        <p>Then there is one more lever available - capturing the full message content of every request - and pulling it moves the diagnosis score by <strong>nothing at all</strong>, while multiplying retention volume by roughly a factor of ten and flipping a personal-data flag to true. The message content was never the problem. The retention numbers there are modelled rather than measured, and labelled as such in the simulator.</p>
+        <p>That is the honest shape of the curve: steep, then flat, then actively harmful. A leader's job on this page is not to maximise coverage. It is to get onto the steep part of the curve and to recognise the flat part before somebody buys it. Sessions b5 and b10 walk the builder track through both ends of that curve directly.</p>
+      </div>
+    </details>
+  </section>
+
+  <!-- ============ EXERCISE 1 ============ -->
+  <section class="section" id="exercise-1">
+    <div class="section-kicker">
+      <span class="klabel">Decision exercise 1 of 2</span>
+      <h2>Write the expected step list for one feature, now <span class="tag demo">★ 8 min · in pairs, on paper</span></h2>
+    </div>
+    <p class="lede">This is the artifact. Eight minutes, one feature, seven lines or fewer. The point is not to get it right; it is to discover how much disagreement exists in the room about what your own system does.</p>
+
+    <div class="steps">
+      <div class="step"><p>Take the feature you inventoried in a1 and list every step a healthy request passes through, in order, in business language. Not function names - "look up the customer's plan", "search the policy corpus", "call the pricing service", "compose the answer".</p></div>
+      <div class="step"><p>Mark each step with whether it can fail independently. If a step can fail on its own and the request can still return something to a user, that step must be able to say so. Those are the ones that matter, and they are usually the ones nobody instrumented.</p></div>
+      <div class="step"><p>Now mark which steps you currently believe emit a span. Do not check yet - guess, and record the guess. The gap between the guess and reality is the most informative number this exercise produces, and it is the number worth reporting upward.</p></div>
+      <div class="step"><p>Have somebody verify the guess against one real trace before the next session. Two disagreements is normal. Five means the shape of your system in your head is not the shape on disk, and that is worth knowing on a calm Tuesday rather than a bad one.</p></div>
+    </div>
+
+    <div class="callout tip">
+      <strong>What to listen for</strong>
+      Listen for the moment two people describe the same feature with a different number of steps. That disagreement is not a documentation problem - it is the exact reason coverage drifts, because a step nobody agrees exists is a step nobody owns instrumenting. Resolving it in a meeting is dramatically cheaper than resolving it during an incident.
+    </div>
+  </section>
+
+  <!-- ============ EXERCISE 2 ============ -->
+  <section class="section" id="exercise-2">
+    <div class="section-kicker">
+      <span class="klabel">Decision exercise 2 of 2</span>
+      <h2>Decide who owns coverage, and what happens when it drifts <span class="tag demo">★ 6 min · decide, do not discuss</span></h2>
+    </div>
+    <p class="lede">Coverage decays by default, for mundane reasons, in every organisation. So the question is not whether it will drift but who finds out and what they are empowered to do. Four decisions, made in the room, written down.</p>
+
+    <div class="steps">
+      <div class="step"><p><strong>The owner.</strong> Does coverage belong to the feature team or to a central platform team? Both work. What does not work is the common third answer, where the platform team owns the tooling and the feature team owns the code and neither owns the gap between them.</p></div>
+      <div class="step"><p><strong>The gate.</strong> Is a missing expected span type a release blocker, a ticket, or neither? If a new AI code path can ship without appearing in a trace, coverage will decay at exactly the rate you ship, and that rate is your best case.</p></div>
+      <div class="step"><p><strong>The budget.</strong> Which of the four costs in Part 4 is your actual constraint - storage, engineering time, cardinality, or privacy? Naming the real one prevents the argument where a proposal is rejected on privacy grounds when the objection was really headcount.</p></div>
+      <div class="step"><p><strong>The review.</strong> When is coverage looked at deliberately, by whom, with what number in front of them? Quarterly, per feature, with unaccounted time and the expected-step-list result is enough. Anything less frequent and the first review will be during an incident.</p></div>
+    </div>
+
+    <div class="callout win">
+      <strong>★ The sentence to leave in the room</strong>
+      Nobody in your organisation decided not to instrument retrieval. That is exactly the problem, and it is also the good news: an unmade decision is much cheaper to fix than a wrong one. Coverage becomes a decision the moment one person owns it, one list exists, and one number gets reported.
+    </div>
+  </section>
+
+  <!-- ============ HOMEWORK ============ -->
+  <section class="section" id="exercise">
+    <div class="section-kicker">
+      <span class="klabel">Homework</span>
+      <h2>Before session a3 - this week <span class="tag exercise">◐ 40-50 min total</span></h2>
+    </div>
+    <ul>
+      <li>Finish the expected step list for one feature and get it verified against a real trace. Bring the two numbers: how many span types the design implies, and how many actually appear. That pair is the whole of your coverage position, and it fits in a single line of a status update.</li>
+      <li>Get the unaccounted-time percentage for one real AI request - total duration minus the sum of emitted spans. For most teams it lands above fifty percent, and it is the most persuasive figure in this course precisely because nobody has to trust you about it.</li>
+      <li>Ask which of your AI features can currently distinguish "retrieval returned nothing" from "the model ignored the context". If the answer is none of them, you now know why the last hallucination discussion in your organisation went nowhere.</li>
+      <li>Read the remediation section of the Anthropic postmortem once more and note the direction: production coverage, not better offline benchmarks. If you make one argument to a sceptical peer this week, make it that one, and hand them the source rather than the summary.</li>
+      <li>Name your real constraint from Part 4 out loud to whoever controls it. Coverage proposals do not fail on merit; they fail because the objection everyone had was never the objection anyone stated.</li>
+    </ul>
+  </section>
+
+  <!-- ============ SOURCES ============ -->
+  <section class="section" id="official">
+    <div class="section-kicker">
+      <span class="klabel">Source material</span>
+      <h2>Official sources covered</h2>
+    </div>
+    <p class="lede">Every claim on this page is either traceable to a primary source in this course's source map, or explicitly labelled as arithmetic or as a constructed teaching figure. Prices carry the date they were read. This session covers:</p>
+    <div class="covered">
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">The auto-instrumentation asymmetry: vendor SDKs wrap the model client, so the model call is the free span and the least likely bug</span><span class="note">Part 1 · framework reality in b3</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Anthropic postmortem, Sep 2025 - green benchmarks missed a bug at 16% peak of Sonnet 4 requests; ~30% of Claude Code users affected; remediation was production coverage</span><span class="note">Part 2 · [P] primary</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Anthropic prompt caching multipliers: 1.25x five-minute cache write, 0.1x cache read - the 12.5x ratio is arithmetic on those, read 2026-08-13</span><span class="note">Part 2 · [P] primary · full cost work in a4 and b4</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Instrumentation coverage as an alertable signal: traces missing an expected span type</span><span class="note">Part 3 · alerting design in a5 and b8</span></div>
+      <div class="covered-row"><span class="status pill light">◐</span><span class="name">The 62% figure and the 32.4% / 38.2% / 100% coverage ladder - computed from the course simulator, a constructed incident with real arithmetic</span><span class="note">Part 1 · labelled on the page · b5 is the simulator session</span></div>
+      <div class="covered-row"><span class="status pill light">◐</span><span class="name">The 6% refusal rate - the constructed Beacon case, not a published statistic</span><span class="note">Part 2 · labelled on the page and in the figure</span></div>
+      <div class="covered-row"><span class="status pill light">◐</span><span class="name">Content capture as the anti-lever: full message content moves diagnosis by nothing and multiplies retention by roughly ten, on modelled volumes</span><span class="note">Part 4 card · proved in b5, decided in b10</span></div>
+      <div class="covered-row"><span class="status pill light">◐</span><span class="name">The price of coverage: sampling, retention and cardinality arithmetic</span><span class="note">Not covered by design · session b7 prices it</span></div>
+      <div class="covered-row"><span class="status pill light">◐</span><span class="name">The exact GenAI span and attribute names used in the figures</span><span class="note">Used loosely here · spelled out with requirement levels in b2 · all Development status, no tagged release</span></div>
+    </div>
+  </section>
+
+  <!-- ============ QUIZ ============ -->
+  <section class="section" id="quiz">
+    <div class="section-kicker">
+      <span class="klabel">Check yourself</span>
+      <h2>Three questions before you go 🎯 <span class="tag exercise">◐ 90 seconds</span></h2>
+    </div>
+    <div class="quiz-q" data-answer="1">
+      <p class="qtext">1 · Your platform team reports excellent trace coverage of every model call in the AI stack. What have they actually told you?</p>
+      <button class="qopt" type="button">A · That observability is in good shape and the next investment should go elsewhere</button>
+      <button class="qopt" type="button">B · That the default worked - the vendor SDK wraps the model client - and that the layers where production actually breaks still need a deliberate decision</button>
+      <button class="qopt" type="button">C · That retrieval and caching are covered too, since they sit inside the same request</button>
+      <button class="qopt" type="button">D · That the model is the most likely source of failure and is therefore correctly prioritised</button>
+      <p class="qwhy">Model call coverage is the one thing nobody has to choose, because auto-instrumentation wraps what the vendor ships. It is genuinely useful and it is the layer that fails least often. Retrieval, caching, tool arguments, retry counts and swallowed exceptions each require somebody to decide they matter - which is why a team can hold real observability spend and still be unable to read its first serious incident.</p>
+    </div>
+    <div class="quiz-q" data-answer="2">
+      <p class="qtext">2 · In the Beacon run, the retrieval step is 4.2 seconds of a 6.8 second wall clock. What changed when a retrieval span was finally emitted?</p>
+      <button class="qopt" type="button">A · The retrieval step got slower, because instrumentation adds overhead</button>
+      <button class="qopt" type="button">B · Coverage went from 32.4% to 100%, which proved the trace store had been dropping spans</button>
+      <button class="qopt" type="button">C · Nothing about the system changed - only what the system reported about itself. 62% of the wall clock stopped being invisible</button>
+      <button class="qopt" type="button">D · Latency improved, because the team could finally optimise the step</button>
+      <p class="qwhy">This is the cleanest illustration of why coverage is a decision rather than a technical problem. The 4.2 seconds were always there and were always the majority of what the user waited for. No code path, no dependency and no configuration changed - the only difference was that somebody decided the step deserved to be described. Uninstrumented time does not look slow. It does not look like anything at all.</p>
+    </div>
+    <div class="quiz-q" data-answer="0">
+      <p class="qtext">3 · A trace arrives with four spans, where your expected step list for that feature says seven. Why is this the highest-value alert on the page?</p>
+      <button class="qopt" type="button">A · Because it is the only signal that tells you your ability to diagnose has degraded, before the incident that needs it - and it fires without any human reading a trace</button>
+      <button class="qopt" type="button">B · Because three missing spans always mean three broken steps</button>
+      <button class="qopt" type="button">C · Because span count is the best available proxy for request quality</button>
+      <button class="qopt" type="button">D · Because it detects hallucinations that eval suites miss</button>
+      <p class="qwhy">Every other signal in this course reports on a request that has already gone wrong. Coverage is the one that reports on your capacity to explain the next one, and it decays silently for mundane reasons: a dependency upgrade drops a hook, a refactor moves a call outside its span, a new path ships without the wrapper. B is the trap - a missing span type usually means a missing instrument, not a broken step, and conflating the two produces the wrong ticket. Alert on the rate, not on single traces, or you have built the alert fatigue that session a5 is about avoiding.</p>
+    </div>
+    <p class="quiz-score"></p>
+  </section>
+
+  <!-- ============ CHEAT SHEET ============ -->
+  <section class="cheat" id="cheatsheet">
+    <h3>Leader session 2 cheat sheet <span>· pin this</span></h3>
+    <div class="grid-2">
+      <div class="cheat-item"><b>The asymmetry</b><span>You get the model calls free, because that is what the vendor SDK wraps. The model calls are rarely the bug.</span></div>
+      <div class="cheat-item"><b>What needs a decision</b><span>Retrieval, caching, tool arguments, retry counts, swallowed exceptions, guardrail outcomes. All of it deliberate.</span></div>
+      <div class="cheat-item"><b>The 62%</b><span>Retrieval alone is 4.2s of a 6.8s Beacon run. Coverage went 32.4% to 38.2% to 100% with no change to the system.</span></div>
+      <div class="cheat-item"><b>Unaccounted time</b><span>Total duration minus the sum of emitted spans. One number, no jargon, cannot be gamed without real improvement.</span></div>
+      <div class="cheat-item"><b>Gaps produce wrong answers</b><span>No retrieval span reads as "the model hallucinated". No retry counter reads as "this call is expensive".</span></div>
+      <div class="cheat-item"><b>Coverage is measurable</b><span>Write the expected span types per feature. Four spans where the design says seven is a detectable coverage incident.</span></div>
+      <div class="cheat-item"><b>The elite case</b><span>Anthropic's evals ran green through a bug hitting 16% of Sonnet 4 requests at peak. The fix was production coverage.</span></div>
+      <div class="cheat-item"><b>Coverage is not free</b><span>Storage, engineering time, cardinality, privacy. Metadata is cheap and high-value; content capture is neither. b7 prices it.</span></div>
+    </div>
+  </section>
+
+  <footer class="pagefoot">
+    <span>Leader session 2 of 6 · learn-ai-observability-with-phoebe · by Phoebe Fu &nbsp;·&nbsp; 📚 <a href="https://phoebefu6.github.io/learn-with-phoebe/">Learn with Phoebe ↗</a></span>
+    <span><a href="../index.html">← Course home</a> &nbsp;·&nbsp; <a href="a3-dashboards-that-answer.html">Next: Dashboards that answer →</a></span>
+  </footer>
+
+</main>
+
+<script src="../assets/app.js?v=2"></script>
+</body>
+</html>

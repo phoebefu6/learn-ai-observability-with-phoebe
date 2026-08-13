@@ -1,0 +1,484 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Builder session 6 · The failure taxonomy - learn ai observability with phoebe</title>
+<link rel="stylesheet" href="../assets/style.css?v=2">
+</head>
+<body>
+
+<div class="toolbar">
+  <div class="wrap">
+    <span class="crumb"><a href="../index.html">learn-ai-observability-with-phoebe</a> / Builder session 6 of 10</span>
+    <button class="btn" id="toggle-all" type="button">Expand all</button>
+    <button class="btn primary" id="zoom-toggle" type="button">Projector zoom: off</button>
+  </div>
+</div>
+
+<header class="masthead">
+  <div class="wrap">
+    <div class="eyebrow">Learn AI Observability with Phoebe · Builder track · Session 6 of 10</div>
+    <h1>The failure taxonomy: <span class="accent">every failure mode has a signal, if you emit it</span></h1>
+    <p class="sub">Session b5 taught you to read one broken trace. This session generalises it. There is exactly one empirically grounded taxonomy of agent failures, and its headline finding is not the one people quote: the largest category is not model stupidity, it is specification and design. We take all fourteen modes, attach the telemetry signal that reveals each one, and then confront the fact that makes tracing non-negotiable - you cannot replay a production run and get the same answer back.</p>
+    <div class="chip-row">
+      <span class="chip level">🟠 Builder track</span>
+      <span class="chip audience">AI engineers · platform engineers · technical PMs</span>
+      <span class="chip time">45 min</span>
+    </div>
+    <div class="agenda">
+      <span class="a1" style="flex:1">0-3 · Welcome</span>
+      <span class="a2" style="flex:4">3-17 · MAST v3 and the 14 modes</span>
+      <span class="a3" style="flex:5">17-40 · Build-along: a signal per mode</span>
+      <span class="a4" style="flex:1">40-45 · Q&amp;A</span>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <!-- ============ INTRO ============ -->
+  <section class="section" id="intro">
+    <div class="section-kicker">
+      <span class="klabel">Part 0</span>
+      <h2>A taxonomy is only useful if each entry comes with a detector</h2>
+    </div>
+    <p class="lede">Evals tell you whether it works. Observability tells you what actually happened. Most "agent failure modes" lists you will find are somebody's intuition arranged into bullet points, and intuition is a bad guide here because the failures that hurt you are the ones that do not look like failures. This session uses the one taxonomy built from hand-annotated production traces, and it insists on the same discipline for every row: name the mode, name the field in the telemetry that reveals it, name the fix. A mode with no detector is a story, not an operating procedure.</p>
+    <div class="legend">
+      <span class="pill solid">Live - presented in session</span>
+      <span class="pill light">Self-study - read after class</span>
+      <span class="pill inkpill">Official sources covered</span>
+    </div>
+    <div class="callout win">
+      <strong>★ What you walk out with today</strong>
+      The full MAST v3 taxonomy with the version caveat you need to avoid quoting the wrong numbers, a failure-mode-to-signal-to-fix table you can paste into a runbook, the four HTTP 200 failures that are invisible to error-rate alerting, the three shapes error propagation takes and why the middle one is the dangerous one, and the reason a production trace can never be reproduced by replay.
+    </div>
+    <div class="callout tip">
+      <strong>The sentence this session is built on</strong>
+      Twenty-eight percent of documented agent failures are control-loop bugs. Not reasoning failures, not knowledge gaps, not prompt-wording problems - the agent repeated a step, or did not know it was finished. Both of those are visible in a span count. You do not need a smarter model to fix them; you need to be looking.
+    </div>
+  </section>
+
+  <!-- ============ PART 1 ============ -->
+  <section class="section" id="mast">
+    <div class="section-kicker">
+      <span class="klabel">Part 1 · the evidence</span>
+      <h2>MAST, and the number everybody gets wrong <span class="tag concept">8 min live</span></h2>
+    </div>
+    <p class="lede">Cemri et al., <em>Why Do Multi-Agent LLM Systems Fail?</em> (arXiv:2503.13657, NeurIPS 2025 Datasets &amp; Benchmarks) is the only agent failure taxonomy in this course with an inter-annotator agreement figure attached to it. 150 hand-annotated traces, kappa 0.88. MAST-Data extends it to more than 1600 traces across seven named frameworks - ChatDev, MetaGPT, HyperAgent, AppWorld, AG2, Magentic-One, OpenManus - and an LLM annotator reproduces the expert labels at 94% accuracy, kappa 0.77. That last figure is what makes the taxonomy operational rather than academic: you can label your own traces at volume.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 400" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="MAST v3 category frequencies: specification and system design 44.4 percent, inter-agent misalignment 32.35 percent, task verification 23.5 percent. Step repetition plus unaware of termination conditions is 28 percent of failures and both are control-loop bugs.">
+        <style>
+          .m1H { font: 700 13px Inter, sans-serif; fill: #1B2230; }
+          .m1T { font: 700 12.5px Inter, sans-serif; fill: #1B2230; }
+          .m1B { font: 700 13px Inter, sans-serif; fill: #FFFFFF; }
+          .m1X { font: 400 11px Inter, sans-serif; fill: #66707E; }
+          .m1K { font: 700 12.5px Inter, sans-serif; fill: #08323A; }
+          .m1R { font: 400 11px Inter, sans-serif; fill: #991B1B; }
+          .m1RB { font: 700 12.5px Inter, sans-serif; fill: #991B1B; }
+        </style>
+
+        <text class="m1H" x="24" y="30">MAST v3 · 150 hand-annotated traces · inter-annotator kappa 0.88</text>
+
+        <text class="m1T" x="24" y="82">FC1</text>
+        <text class="m1X" x="24" y="100">Specification &amp; design</text>
+        <rect x="200" y="62" width="284" height="34" rx="8" fill="#0C1F3F"/>
+        <text class="m1B" x="216" y="84">44.4%</text>
+        <text class="m1X" x="496" y="84">the largest bucket - not "the model was dumb"</text>
+
+        <text class="m1T" x="24" y="144">FC2</text>
+        <text class="m1X" x="24" y="162">Inter-agent misalignment</text>
+        <rect x="200" y="124" width="207" height="34" rx="8" fill="#16305C"/>
+        <text class="m1B" x="216" y="146">32.35%</text>
+        <text class="m1X" x="419" y="146">includes reasoning-action mismatch at 13.2%</text>
+
+        <text class="m1T" x="24" y="206">FC3</text>
+        <text class="m1X" x="24" y="224">Task verification</text>
+        <rect x="200" y="186" width="150" height="34" rx="8" fill="#3F62A8"/>
+        <text class="m1B" x="216" y="208">23.5%</text>
+        <text class="m1X" x="362" y="208">nobody checked the work before returning it</text>
+
+        <rect x="24" y="250" width="832" height="76" rx="10" fill="#E4F6F9" stroke="#0891A6" stroke-width="1.5"/>
+        <text class="m1K" x="44" y="274">28% of all failures are pure control-loop bugs, visible in telemetry</text>
+        <text class="m1X" x="44" y="294">Step repetition 15.7% plus unaware of termination conditions 12.4%. Neither of those needs a</text>
+        <text class="m1X" x="44" y="312">smarter model. Both are span-count and termination-condition problems, and both are countable.</text>
+
+        <rect x="24" y="340" width="832" height="48" rx="10" fill="#FEF2F2" stroke="#FCA5A5" stroke-width="1.5"/>
+        <text class="m1RB" x="44" y="360">Do not quote 41.8 / 36.9 / 21.3</text>
+        <text class="m1R" x="44" y="378">Those are the v1/v2 figures over the original 150-trace corpus. The bars above are v3.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - the three MAST v3 categories, and the 28% that live in your span counts</figcaption>
+    </figure>
+
+    <div class="callout warn">
+      <strong>The version caveat, stated plainly</strong>
+      Widely circulated summaries of MAST quote <strong>41.8 / 36.9 / 21.3</strong> for the three categories. Those are the v1/v2 figures over the original 150-trace corpus. This page cites <strong>v3: 44.4 / 32.35 / 23.5</strong>, and the per-mode percentages in the table below sum to the v3 totals. If you present these numbers to anyone, name the version out loud. A taxonomy that revises its own figures across preprint versions is behaving correctly; quoting it without a version is not.
+    </div>
+
+    <h3 style="font-size:1rem;margin:1.6rem 0 .4rem;">The full fourteen, with v3 frequencies</h3>
+    <table class="clean">
+      <tr><th>Failure mode</th><th>v3 freq</th><th>What it means</th><th>First place it shows in telemetry</th></tr>
+      <tr><td colspan="4" style="background:#0C1F3F;color:#fff;font-weight:700;font-size:.8rem;letter-spacing:.05em;text-transform:uppercase;">FC1 · Specification and system design · 44.4%</td></tr>
+      <tr><td>Disobey task specification</td><td>11.8%</td><td>The agent does something adjacent to what was asked</td><td>Output assertion failure with span status OK</td></tr>
+      <tr><td>Disobey role specification</td><td>1.5%</td><td>An agent steps outside its assigned role</td><td>Tool names appearing under the wrong <code>gen_ai.agent.name</code></td></tr>
+      <tr><td><strong>Step repetition</strong></td><td><strong>15.7%</strong></td><td>The same step executed again and again</td><td>Repeating <code>(tool, args-hash)</code> pairs; span count above p99</td></tr>
+      <tr><td>Loss of conversation history</td><td>2.80%</td><td>Earlier context vanishes mid-run</td><td><code>gen_ai.conversation.compacted</code>; input tokens dropping mid-conversation</td></tr>
+      <tr><td><strong>Unaware of termination conditions</strong></td><td><strong>12.4%</strong></td><td>The agent does not know it is finished</td><td><code>gen_ai.invoke_agent.tool_calls</code> in the high buckets; duration rising with no new span <em>types</em></td></tr>
+      <tr><td colspan="4" style="background:#16305C;color:#fff;font-weight:700;font-size:.8rem;letter-spacing:.05em;text-transform:uppercase;">FC2 · Inter-agent misalignment · 32.35%</td></tr>
+      <tr><td>Conversation reset</td><td>2.20%</td><td>The thread restarts from nothing</td><td>New <code>gen_ai.conversation.id</code> mid-session; input tokens back to baseline</td></tr>
+      <tr><td>Fail to ask for clarification</td><td>6.80%</td><td>Ambiguity resolved by guessing</td><td>Zero clarifying turns on requests a human would query</td></tr>
+      <tr><td>Task derailment</td><td>7.40%</td><td>The run drifts to a different task</td><td>Tool distribution shift within one trace</td></tr>
+      <tr><td>Information withholding</td><td>0.85%</td><td>One agent does not pass on what it knows</td><td>A retrieved document id never appearing downstream</td></tr>
+      <tr><td>Ignored other agent's input</td><td>1.90%</td><td>A handoff result is discarded</td><td>Sibling <code>invoke_agent</code> output absent from the next prompt</td></tr>
+      <tr><td><strong>Reasoning-action mismatch</strong></td><td><strong>13.2%</strong></td><td>The agent says one thing and does another - including reading an error and answering as if it had not</td><td>Leaf span in error, root span OK. This is the absorbed-error pattern in Part 2</td></tr>
+      <tr><td colspan="4" style="background:#3F62A8;color:#fff;font-weight:700;font-size:.8rem;letter-spacing:.05em;text-transform:uppercase;">FC3 · Task verification · 23.5%</td></tr>
+      <tr><td>Premature termination</td><td>6.20%</td><td>The run stops before the task is done</td><td>Short trace with a missing expected span type</td></tr>
+      <tr><td>No or incomplete verification</td><td>8.20%</td><td>Nothing checked the result</td><td>Absence of a verification span - a coverage gap, not an error</td></tr>
+      <tr><td>Incorrect verification</td><td>9.10%</td><td>Something checked it and got it wrong</td><td>Verification span present and OK, output assertion still fails</td></tr>
+    </table>
+
+    <details class="card" open>
+      <summary><span class="mode live">Live</span>Why the largest bucket being "design" changes what you build<span class="mini">4 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>If you believe agent failures are mostly the model being insufficiently clever, the roadmap writes itself: wait for the next model, spend on prompt engineering, add more examples. That roadmap is aimed at somewhere between a quarter and a third of your failures.</p>
+        <p>MAST v3 says the plurality of failures - 44.4% - come from specification and system design. Two of the five modes in that category, step repetition at 15.7% and unaware-of-termination at 12.4%, are things a loop counter detects. Together they are 28% of all documented failures, and the fix for both is written in configuration rather than in prose: a hard cap on steps, a machine-checkable termination condition, deduplication of identical calls.</p>
+        <p>That is a genuinely encouraging finding, and it is why this course exists. The largest slice of the problem is not waiting on a frontier model. It is waiting on somebody to count the spans.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode self">Self-study</span>What MAST does not cover, and where the numbers came from<span class="mini">3 min read</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>Three honest limits worth stating before you build a dashboard on these percentages.</p>
+        <ul>
+          <li><strong>The corpus is multi-agent systems.</strong> The seven frameworks in MAST-Data are agent frameworks - ChatDev, MetaGPT, HyperAgent, AppWorld, AG2, Magentic-One, OpenManus. A single-agent retrieval bot will not have the same distribution, and the FC2 inter-agent category partly does not apply to it. Use the taxonomy as a checklist, and derive your own frequencies from your own traces.</li>
+          <li><strong>The percentages are frequencies within an annotated failure set, not a base rate.</strong> They tell you how failures divide up, not how often systems fail. Those are different questions and only the first one is answered here.</li>
+          <li><strong>The v1/v2 versus v3 split is the reason to name your version.</strong> This course could not extract v1's own table to reconcile the 41.8/36.9/21.3 triplet line by line, so it is cited only as "the earlier figures". If you need that reconciliation, read v1 directly rather than trusting a summary.</li>
+        </ul>
+        <p>The mechanically useful part is the 94% LLM-annotator accuracy. It means the taxonomy can be applied to your own trace store as a batch job, which turns a paper into a monthly report.</p>
+      </div>
+    </details>
+  </section>
+
+  <!-- ============ PART 2 ============ -->
+  <section class="section" id="signals">
+    <div class="section-kicker">
+      <span class="klabel">Part 2 · mode to signal to fix</span>
+      <h2>The three shapes an error takes on its way up <span class="tag concept">7 min live</span></h2>
+    </div>
+    <p class="lede">Before the table, one diagram, because it explains why the table's middle rows are the hard ones. An error at a leaf span has exactly three ways to reach the root, and only one of them is honest.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 320" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Three error propagation patterns. Faithful: the leaf error reaches the root. Absorbed: the leaf errors but the root stays OK because the agent apologised and answered anyway. Amplified: one leaf failure becomes six retries.">
+        <style>
+          .p2T { font: 700 12.5px Inter, sans-serif; fill: #FFFFFF; }
+          .p2M { font: 400 10.5px ui-monospace, Menlo, monospace; fill: #FFFFFF; }
+          .p2X { font: 400 11px Inter, sans-serif; fill: #66707E; }
+          .p2R { font: 400 11px Inter, sans-serif; fill: #991B1B; }
+          .p2K { font: 700 12.5px Inter, sans-serif; fill: #08323A; }
+        </style>
+
+        <rect x="24" y="24" width="266" height="30" rx="8" fill="#16305C"/>
+        <text class="p2T" x="40" y="44">1 · FAITHFUL</text>
+        <rect x="24" y="58" width="266" height="214" rx="8" fill="#EDF2FB" stroke="#AFC0E4" stroke-width="1.5"/>
+        <text class="p2X" x="38" y="80">status propagates to the root</text>
+        <rect x="38" y="90" width="238" height="26" rx="6" fill="#991B1B"/>
+        <text class="p2M" x="48" y="107">root  ERROR</text>
+        <rect x="50" y="120" width="226" height="26" rx="6" fill="#991B1B"/>
+        <text class="p2M" x="60" y="137">invoke_agent  ERROR</text>
+        <rect x="62" y="150" width="214" height="26" rx="6" fill="#991B1B"/>
+        <text class="p2M" x="72" y="167">execute_tool  ERROR</text>
+        <text class="p2X" x="38" y="192">The error reaches the root span.</text>
+        <text class="p2X" x="38" y="210">Your error-rate alert fires - the</text>
+        <text class="p2X" x="38" y="228">easy case, and the rare one.</text>
+
+        <rect x="307" y="24" width="266" height="30" rx="8" fill="#991B1B"/>
+        <text class="p2T" x="323" y="44">2 · ABSORBED</text>
+        <rect x="307" y="58" width="266" height="214" rx="8" fill="#FEF2F2" stroke="#FCA5A5" stroke-width="1.5"/>
+        <text class="p2R" x="321" y="80">the dangerous one - swallowed</text>
+        <rect x="321" y="90" width="238" height="26" rx="6" fill="#16305C"/>
+        <text class="p2M" x="331" y="107">root  OK  http 200</text>
+        <rect x="333" y="120" width="226" height="26" rx="6" fill="#16305C"/>
+        <text class="p2M" x="343" y="137">invoke_agent  OK</text>
+        <rect x="345" y="150" width="214" height="26" rx="6" fill="#991B1B"/>
+        <text class="p2M" x="355" y="167">execute_tool  ERROR</text>
+        <text class="p2R" x="321" y="192">The agent read the error text,</text>
+        <text class="p2R" x="321" y="210">apologised, and returned a</text>
+        <text class="p2R" x="321" y="228">plausible answer. Root stays OK,</text>
+        <text class="p2R" x="321" y="246">HTTP 200. This is MAST reasoning-</text>
+        <text class="p2R" x="321" y="264">action mismatch: 13.2% of all.</text>
+
+        <rect x="590" y="24" width="266" height="30" rx="8" fill="#0891A6"/>
+        <text class="p2T" x="606" y="44">3 · AMPLIFIED</text>
+        <rect x="590" y="58" width="266" height="214" rx="8" fill="#E4F6F9" stroke="#0891A6" stroke-width="1.5"/>
+        <text class="p2X" x="604" y="80">one failure multiplied by retries</text>
+        <rect x="604" y="90" width="238" height="26" rx="6" fill="#991B1B"/>
+        <text class="p2M" x="614" y="107">root  ERROR  40.2s</text>
+        <rect x="616" y="120" width="226" height="26" rx="6" fill="#3F62A8"/>
+        <text class="p2M" x="626" y="137">invoke_agent  6 retries</text>
+        <rect x="628" y="150" width="214" height="26" rx="6" fill="#991B1B"/>
+        <text class="p2M" x="638" y="167">execute_tool  TIMEOUT</text>
+        <text class="p2X" x="604" y="192">One leaf failure becomes six.</text>
+        <text class="p2X" x="604" y="210">Status is right; cost is 6x and</text>
+        <text class="p2X" x="604" y="228">duration is 40s. The signal is</text>
+        <text class="p2X" x="604" y="246">spend and shape, not status.</text>
+
+        <rect x="24" y="292" width="14" height="14" rx="3" fill="#0891A6"/>
+        <text class="p2K" x="48" y="304">Absorbed errors are why an assertion on output CONTENT, not on status, is the only reliable detector.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - faithful, absorbed and amplified propagation, and which one your dashboard misses</figcaption>
+    </figure>
+
+    <p>The Beacon incident is pattern 2 exactly. The warehouse query times out after 4.1s and returns zero rows, a <code>try / except</code> swallows it, the fallback serves a 19.4-hour-old cache entry, and the model faithfully summarises stale data. Every span is green. The reason no alert fired is not that the monitoring was badly configured; it is that status-based monitoring is structurally incapable of seeing an absorbed error.</p>
+
+    <h3 style="font-size:1rem;margin:1.6rem 0 .4rem;">Failure mode to telemetry signal to fix</h3>
+    <table class="clean">
+      <tr><th>Failure</th><th>The signal that reveals it</th><th>The fix</th></tr>
+      <tr><td>Wrong tool selection</td><td><code>gen_ai.tool.name</code> distribution shift; a tool result that is never referenced downstream</td><td>Shrink and disambiguate the tool set. Anthropic's own test: "If a human engineer can't definitively say which tool should be used in a given situation, an AI agent can't be expected to do better"</td></tr>
+      <tr><td>Tool argument errors</td><td><code>execute_tool</code> span carrying <code>error.type</code>; a <code>tool_result</code> with <code>is_error: true</code>; retry-same-tool-different-args pairs</td><td><code>strict: true</code> on tool definitions. Return machine-actionable error text, not a stack trace</td></tr>
+      <tr><td>Retrieval returns nothing useful</td><td>Retrieval span present but low max similarity; the answer carries no citation; downstream input length equals the no-context baseline</td><td>Log retrieved ids <strong>and scores</strong> as span attributes, so null retrieval is visible rather than inferred</td></tr>
+      <tr><td>Context exhaustion and truncation</td><td><code>stop_reason: "max_tokens"</code> <strong>and</strong> <code>"model_context_window_exceeded"</code> - the docs say treat <strong>both</strong> as truncated; cumulative input tokens climbing across one conversation id</td><td>Compaction, structured note-taking outside the window, sub-agents. Alert on <strong>approach</strong> to the limit, not on the error</td></tr>
+      <tr><td><strong>Context rot</strong> - decay well before the limit</td><td>A fixed canary eval score plotted against <strong>input length</strong>, not against the limit</td><td>Chroma's <em>Context Rot</em>, across 18 models: "LLMs do not maintain consistent performance across input lengths". Distractors hurt even at n=1, and models did <strong>better on shuffled haystacks than logically structured ones</strong>. Anthropic frames the same thing as an attention budget: "Every new token introduced depletes this budget"</td></tr>
+      <tr><td>Runaway loops</td><td>Span count per trace above p99; the same <code>(tool, args-hash)</code> repeating; duration rising with no new span <em>types</em>; <code>stop_reason: "pause_turn"</code> from the server-tool 10-iteration default</td><td>Hard caps on steps, tokens and wall clock. Explicit machine-checkable termination conditions. Deduplicate identical calls</td></tr>
+      <tr><td><strong>Silent partial failure</strong> - the hardest class</td><td>An <strong>empty 2-3 token response carrying <code>stop_reason: "end_turn"</code></strong> at HTTP 200 - no error, no content, documented as "typically occurs... particularly after tool results". Also a <code>tool_use</code> block with no matching result block</td><td>Assert on the <strong>output</strong>, never on the status code. Post-conditions per step</td></tr>
+      <tr><td>Cascading retries</td><td>A retry-attempt counter as a span attribute - invisible if you never emit it; cost per trace going bimodal; parent duration roughly N times leaf duration</td><td>Idempotency keys, retry <strong>budgets</strong> rather than per-call retries, circuit breakers</td></tr>
+      <tr><td>Rate limits and 429s</td><td>429 plus <code>retry-after</code> plus the <code>anthropic-ratelimit-*</code> header family. <strong>Alert on <code>*-remaining</code> trending to zero, not on the 429</strong> - by the time you see the 429 you have already dropped the request</td><td>Respect token-bucket enforcement: "a rate of 60 RPM might be enforced as 1 request per second", so bursts fail while you are nominally under quota. Acceleration limits will 429 you for ramping too fast</td></tr>
+      <tr><td>Mid-trajectory timeout</td><td>Root span in error plus <strong>a dangling child span with no end timestamp</strong>; p99 clipped exactly at your client timeout value</td><td>Checkpoint state so a run resumes rather than restarts. Budget for it: "A single 300k-token generation can take over an hour"</td></tr>
+      <tr><td>Run-to-run non-determinism</td><td>Same input, different output; divergence at a specific token index</td><td>Part 3. The fix is not reproduction, it is capture</td></tr>
+      <tr><td><strong>Refusals</strong></td><td><code>stop_reason: "refusal"</code> with <code>stop_details</code>, returned as <strong>HTTP 200, not an error</strong> - completely invisible to error-rate alerting</td><td>Track refusal rate as a first-class SLI, segmented by feature and tenant</td></tr>
+    </table>
+
+    <div class="callout warn">
+      <strong>The four failures that arrive as HTTP 200</strong>
+      An empty response with <code>stop_reason: "end_turn"</code>. A truncation with <code>stop_reason: "max_tokens"</code> or <code>"model_context_window_exceeded"</code>. A refusal with <code>stop_reason: "refusal"</code>. And an absorbed error where your own code caught the exception. All four are successes to an error-rate dashboard. Any monitoring built on status codes alone is blind to the majority of the failure modes in the table above, which is the entire reason this session exists.
+    </div>
+  </section>
+
+  <!-- ============ PART 3 ============ -->
+  <section class="section" id="nondeterminism">
+    <div class="section-kicker">
+      <span class="klabel">Part 3 · why capture beats replay</span>
+      <h2>Non-determinism, and the end of "just run it again" <span class="tag concept">6 min live</span></h2>
+    </div>
+    <p class="lede">Every debugging instinct you have from ordinary software rests on reproduction: find the input, replay it, watch it fail, fix it. That instinct does not transfer, and there is a clean measurement of why.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 405" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="One thousand completions of one prompt at temperature zero produced eighty unique completions. All one thousand identical through token 102, diverging at token 103. The cause is lack of batch invariance, not GPU nondeterminism.">
+        <style>
+          .n3H { font: 700 13px Inter, sans-serif; fill: #1B2230; }
+          .n3M { font: 400 11px ui-monospace, Menlo, monospace; fill: #FFFFFF; }
+          .n3X { font: 400 11px Inter, sans-serif; fill: #66707E; }
+          .n3T { font: 700 12.5px Inter, sans-serif; fill: #1B2230; }
+          .n3W { font: 700 12.5px Inter, sans-serif; fill: #FFFFFF; }
+          .n3S { font: 400 11px Inter, sans-serif; fill: #AFC0E4; }
+          .n3R { font: 400 11px Inter, sans-serif; fill: #991B1B; }
+          .n3RB { font: 700 12.5px Inter, sans-serif; fill: #991B1B; }
+          .n3C { font: 400 11px Inter, sans-serif; fill: #08323A; }
+          .n3CB { font: 700 12.5px Inter, sans-serif; fill: #08323A; }
+        </style>
+
+        <text class="n3H" x="24" y="30">1000 completions · one prompt · temperature 0 · Qwen3-235B</text>
+
+        <rect x="60" y="68" width="370" height="30" rx="7" fill="#16305C"/>
+        <text class="n3M" x="74" y="88">tokens 1-102: all 1000 identical</text>
+
+        <path d="M430 83 L452 56" stroke="#3F62A8" stroke-width="1.5" fill="none"/>
+        <path d="M430 83 L452 110" stroke="#0891A6" stroke-width="1.5" fill="none"/>
+
+        <rect x="452" y="42" width="212" height="28" rx="7" fill="#3F62A8"/>
+        <text class="n3M" x="464" y="61">992: "Queens, New York"</text>
+        <rect x="452" y="96" width="212" height="28" rx="7" fill="#0891A6"/>
+        <text class="n3M" x="464" y="115">8: "New York City"</text>
+
+        <text class="n3X" x="418" y="152">divergence begins at token 103</text>
+
+        <rect x="676" y="42" width="180" height="82" rx="8" fill="#EDF2FB" stroke="#AFC0E4" stroke-width="1.5"/>
+        <text class="n3T" x="692" y="64">80 unique</text>
+        <text class="n3T" x="692" y="82">completions</text>
+        <text class="n3X" x="692" y="102">most common one</text>
+        <text class="n3X" x="692" y="118">occurred 78 times</text>
+
+        <rect x="24" y="180" width="406" height="110" rx="10" fill="#FEF2F2" stroke="#FCA5A5" stroke-width="1.5"/>
+        <text class="n3RB" x="44" y="204">Not the cause: GPU nondeterminism</text>
+        <text class="n3R" x="44" y="226">Kernels are run-to-run deterministic, and</text>
+        <text class="n3R" x="44" y="244">floating-point atomics are not the story here.</text>
+        <text class="n3R" x="44" y="268">This is the popular explanation and it is wrong.</text>
+
+        <rect x="450" y="180" width="406" height="110" rx="10" fill="#E4F6F9" stroke="#0891A6" stroke-width="1.5"/>
+        <text class="n3CB" x="470" y="204">The cause: kernels are not batch-invariant</text>
+        <text class="n3C" x="470" y="226">Server batch size varies with other users' load,</text>
+        <text class="n3C" x="470" y="244">so the result changes with who else is calling.</text>
+        <text class="n3C" x="470" y="268">With batch-invariant kernels, all 1000 matched.</text>
+
+        <rect x="24" y="316" width="832" height="72" rx="10" fill="#0C1F3F"/>
+        <text class="n3W" x="44" y="340">You cannot reproduce a production trace by replaying it.</text>
+        <text class="n3S" x="44" y="360">So you must capture enough of it at the time. That is the entire argument for tracing over</text>
+        <text class="n3S" x="44" y="378">reproduction - and on Claude Opus 4.7+, temperature is deprecated and 400s anyway.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - 80 unique completions from one prompt at temperature 0, and what actually caused it</figcaption>
+    </figure>
+
+    <details class="card" open>
+      <summary><span class="mode live">Live</span>The quote that ends the argument<span class="mini">3 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>Thinking Machines Lab, <em>Defeating Nondeterminism in LLM Inference</em> (10 September 2025), took the prompt "Tell me about Richard Feynman", ran it 1000 times against Qwen3-235B at temperature 0, and got <strong>80 unique completions</strong>. The most common one appeared 78 times. All 1000 were byte-identical through token 102 and diverged at token 103, where 992 said "Queens, New York" and 8 said "New York City".</p>
+        <p>The interesting part is the diagnosis. It is not GPU nondeterminism - the kernels are run-to-run deterministic. They are simply not <strong>batch-invariant</strong>: the numerical result of a matmul depends on the batch shape it was executed in, and the batch shape depends on how many other people are hitting the same server at the same moment. In their words, "the other concurrent users are not an 'input' to the system but rather a nondeterministic property." With batch-invariant kernels in place, all 1000 completions came back identical.</p>
+        <p>Sit with the consequence for a second. The other tenants on your provider's inference server are an uncontrolled input to your output. You cannot set them, log them, or replay them. Therefore you cannot replay your own production request and expect the same trajectory. <strong>Whatever you needed to know about that run, you needed to have captured while it was running.</strong></p>
+        <p>And the one lever people reach for here has been taken away: on Claude Opus 4.7 and later, <code>temperature</code>, <code>top_p</code> and <code>top_k</code> are deprecated and return a 400 on non-default values. Temperature-0 reproducibility is not merely unreliable, it is not on the menu.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode self">Self-study</span>Three habits that follow from non-reproducibility<span class="mini">3 min read</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <ul>
+          <li><strong>Never write a bug report that depends on a rerun.</strong> "I ran it again and it was fine" is not evidence of a fix, and "I cannot reproduce it" is not evidence of no bug. Both are the expected behaviour of the system. Argue from the captured trace or do not argue.</li>
+          <li><strong>Alert on rates over samples, never on single requests.</strong> If 1000 identical inputs give 80 distinct outputs, any per-request quality threshold flaps by construction. Quality is a population statistic here even when the incident is one user's answer.</li>
+          <li><strong>Treat coverage as your reproduction budget.</strong> Every span you chose not to emit is a question you have permanently given up the ability to answer about that run. In ordinary software, unclear instrumentation is an inconvenience because you can rerun. Here it is final.</li>
+        </ul>
+      </div>
+    </details>
+  </section>
+
+  <!-- ============ DEMO 1 ============ -->
+  <section class="section" id="demo-1">
+    <div class="section-kicker">
+      <span class="klabel">Demo 1 of 2</span>
+      <h2>Make an absorbed error impossible to absorb <span class="tag demo">★ 12 min · everyone builds</span></h2>
+    </div>
+    <p class="lede">Beacon's Insight Bot is pattern 2 from Part 2. We are not going to fix the warehouse timeout - that is somebody else's ticket. We are going to make it impossible for the same failure to reach an executive silently again, which is the observability job.</p>
+
+    <div class="steps">
+      <div class="step"><p>Find the <code>try / except</code> that swallows the warehouse timeout. In the except block, before you return the cached fallback, do three things: <code>span.record_exception(e)</code>, <code>span.set_status(Status(StatusCode.ERROR))</code>, and set a plain-language attribute such as <code>beacon.fallback.used = true</code>. The status makes it visible to the dashboard; the attribute makes it queryable.</p></div>
+      <div class="step"><p>Now add the thing status cannot give you: the <strong>age of what you served</strong>. Emit <code>beacon.cache.age_seconds</code> on the span. The Beacon incident served a 19.4-hour-old entry - 69,840 seconds. That number was always available in the code and never left the process. One attribute converts an invisible incident into a chart.</p></div>
+      <div class="step"><p>Add an assertion on the <strong>output</strong>, not the status. For Beacon the assertion is a post-condition: the answer must cite at least one row id that was returned in this trace. Zero rows returned means the assertion fails, which means an error status on the root span, which means somebody is told - even though the HTTP response is a perfectly formed 200 and the prose reads beautifully.</p></div>
+      <div class="step"><p>Handle the four HTTP 200 failures explicitly on every model call, using the real <code>stop_reason</code> values. Truncation counts <strong>both</strong> <code>max_tokens</code> and <code>model_context_window_exceeded</code>. Refusal is <code>refusal</code>. The empty-response case is the nasty one: a 2-3 token body with <code>stop_reason: "end_turn"</code>, most often right after a tool result.</p></div>
+      <div class="step"><p>Break it deliberately and confirm each detector fires. Force zero rows from the warehouse; confirm the root span goes red. Cap <code>max_tokens</code> at 16 and confirm the truncation flag appears. Then re-read the trace and check that a colleague who was not in this room could tell what happened from the attributes alone. If they cannot, the attribute names are wrong.</p></div>
+    </div>
+
+    <div class="prompt-box good">
+      <span class="label">★ The four HTTP 200 failures, in one guard</span>
+      <p>TRUNCATED = {"max_tokens", "model_context_window_exceeded"} &nbsp;·&nbsp; if resp.stop_reason in TRUNCATED: span.set_attribute("beacon.truncated", True); span.set_status(Status(StatusCode.ERROR)) &nbsp;·&nbsp; if resp.stop_reason == "refusal": span.set_attribute("beacon.refused", True) &nbsp;·&nbsp; if resp.stop_reason == "pause_turn": span.set_attribute("beacon.paused", True) &nbsp;·&nbsp; if not resp.content or len(text_of(resp)) &lt; 40: span.set_attribute("beacon.empty_end_turn", True); span.set_status(Status(StatusCode.ERROR))</p>
+    </div>
+
+    <div class="callout tip">
+      <strong>The habit this demo is really teaching</strong>
+      Status answers "did my code throw". Attributes answer "what did the system actually serve". The Beacon incident is entirely contained in the gap between those two questions, and so is MAST's reasoning-action mismatch at 13.2%. Whenever you catch something, ask what the user received as a result, and put <em>that</em> on the span.
+    </div>
+  </section>
+
+  <!-- ============ DEMO 2 ============ -->
+  <section class="section" id="demo-2">
+    <div class="section-kicker">
+      <span class="klabel">Demo 2 of 2</span>
+      <h2>Build the loop and timeout detectors <span class="tag demo">★ 10 min · everyone builds</span></h2>
+    </div>
+    <p class="lede">Two of MAST's control-loop modes - step repetition at 15.7% and unaware-of-termination at 12.4% - need no model understanding at all to detect. They are shape problems, and shape is cheap. Third, we catch the timeout that leaves a span half open.</p>
+
+    <div class="steps">
+      <div class="step"><p>Emit a span attribute for the loop index on every iteration of the agent's tool loop, and an args hash for every tool call: <code>beacon.step</code> and <code>beacon.tool.args_sha</code>. Step repetition is now a duplicate-detection query rather than a reading exercise. Run your last week of traces through it and count.</p></div>
+      <div class="step"><p>Record the two agent-call-count metrics the GenAI conventions already define - <code>gen_ai.invoke_agent.tool_calls</code> and <code>gen_ai.invoke_agent.inference_calls</code>. Both are histograms with buckets running 1, 2, 4, 8, 16, 32, 64, 128. The high buckets exist precisely so a runaway loop becomes visible without anybody opening a trace. Note which buckets your agent currently lands in; that is your loop baseline.</p></div>
+      <div class="step"><p>Now the diagnostic that separates a legitimately long run from a loop: <strong>duration rising with no new span types</strong>. A run that gets slower because it is doing more <em>kinds</em> of things is working. A run that gets slower doing the same three span names over and over is stuck. Compute distinct span names per trace alongside span count and plot them together.</p></div>
+      <div class="step"><p>Find your dangling spans. Query for child spans with no end timestamp whose root span is in error - that is the mid-trajectory timeout signature. Then check whether your p99 latency is clipped flat at exactly your client timeout value. If it is, your p99 is not measuring your system, it is measuring your own configuration.</p></div>
+      <div class="step"><p>Last, turn the 429 alert around. Stop alerting on 429 responses and start alerting on the <code>anthropic-ratelimit-*remaining</code> headers trending toward zero. Token-bucket enforcement means "a rate of 60 RPM might be enforced as 1 request per second", so a burst can fail while your average utilisation dashboard shows comfortable headroom. The 429 is the post-mortem; the remaining counter is the warning.</p></div>
+    </div>
+
+    <div class="callout warn">
+      <strong>What you have just built, in MAST's own terms</strong>
+      Detectors for step repetition (15.7%), unaware of termination conditions (12.4%), reasoning-action mismatch (13.2%) and premature termination (6.20%). That is 47.5% of the documented failure distribution, caught with a loop counter, an args hash, an output assertion and a span-completeness query. No model changes, no eval suite, no vendor.
+    </div>
+  </section>
+
+  <!-- ============ HOMEWORK ============ -->
+  <section class="section" id="exercise">
+    <div class="section-kicker">
+      <span class="klabel">Homework</span>
+      <h2>Try it yourself - this week <span class="tag exercise">◐ 50-60 min total</span></h2>
+    </div>
+    <ul>
+      <li>Take the fourteen MAST modes and mark each one <strong>detected</strong>, <strong>detectable</strong> or <strong>invisible</strong> in your current telemetry. Invisible means you could not tell the difference today between it happening and not happening. Count the invisible ones; that number is your session b6 backlog and it is usually more than half.</li>
+      <li>Grep your codebase for every <code>except</code> in the path of an AI request and check each one for two things: does it set span status, and does it record what the user received instead. The second is the one nobody has. Every miss is a potential absorbed error.</li>
+      <li>Query a week of traces for the four HTTP 200 failures - empty <code>end_turn</code> bodies, both truncation reasons, and <code>refusal</code>. If you cannot run that query because you never stored <code>stop_reason</code>, that itself is the finding, and it is a one-line fix.</li>
+      <li>Plot one canary eval score against <strong>input length</strong> rather than against your context limit. Context rot means quality decays well before the limit is reached, so a graph that only marks the limit tells you nothing about the region you actually operate in.</li>
+      <li>Run the non-determinism experiment on your own stack: one prompt, fifty calls, count distinct outputs and find the token index where they first diverge. Show the result to whoever last asked you to "just reproduce it". This is the fastest way to win that argument permanently.</li>
+    </ul>
+  </section>
+
+  <!-- ============ SOURCES ============ -->
+  <section class="section" id="official">
+    <div class="section-kicker">
+      <span class="klabel">Source material</span>
+      <h2>Official sources covered</h2>
+    </div>
+    <p class="lede">Every number on this page comes from a primary source catalogued in this course's source map, and each is cited with its version. Where a claim is derived rather than published, this page says so.</p>
+    <div class="covered">
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">MAST: Cemri et al., <em>Why Do Multi-Agent LLM Systems Fail?</em>, arXiv:2503.13657, NeurIPS 2025 Datasets &amp; Benchmarks</span><span class="note">Part 1 · v3 frequencies, 150 traces, kappa 0.88, MAST-Data 1600+ traces, 94% LLM annotator</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">The version caveat: 41.8 / 36.9 / 21.3 are the v1/v2 figures, not v3</span><span class="note">Part 1 · named explicitly so nobody quotes the wrong triplet</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Anthropic <code>stop_reason</code> semantics: <code>max_tokens</code>, <code>model_context_window_exceeded</code>, <code>refusal</code>, <code>pause_turn</code>, and the empty 2-3 token <code>end_turn</code> body at HTTP 200</span><span class="note">Part 2 + Demo 1 · the four failures that are not errors</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Rate limiting: the <code>anthropic-ratelimit-*</code> header family, token-bucket enforcement, acceleration limits</span><span class="note">Part 2 + Demo 2 · alert on remaining, not on the 429</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Chroma, <em>Context Rot</em>, 18 models - including the shuffled-versus-structured haystack result</span><span class="note">Part 2 · plot quality against input length, not against the limit</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Thinking Machines Lab, <em>Defeating Nondeterminism in LLM Inference</em>, 10 Sep 2025</span><span class="note">Part 3 · 1000 completions, 80 unique, divergence at token 103, batch invariance</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name"><code>gen_ai.invoke_agent.tool_calls</code> and <code>.inference_calls</code> histograms, buckets 1 to 128</span><span class="note">Demo 2 · the runaway loop as a metric rather than a reading exercise</span></div>
+      <div class="covered-row"><span class="status pill light">◐</span><span class="name">Sampling the traces these detectors depend on, and the cardinality cost of the attributes you just added</span><span class="note">Named here · b7 is the whole argument</span></div>
+      <div class="covered-row"><span class="status pill light">◐</span><span class="name">Burn-rate alerting and what deserves a page versus a ticket</span><span class="note">This page produces the signals · b8 decides who gets woken up</span></div>
+      <div class="covered-row"><span class="status pill bare">✕</span><span class="name">Base rates - how often agent systems fail at all</span><span class="note">Not available. MAST reports how failures divide, not how often they happen. Derive your own from your own traces</span></div>
+      <div class="covered-row"><span class="status pill bare">✕</span><span class="name">A line-by-line reconciliation of MAST v1's own category table against v3</span><span class="note">Could not extract v1's table. The earlier triplet is cited as "the v1/v2 figures" and nothing more is claimed</span></div>
+    </div>
+  </section>
+
+  <!-- ============ QUIZ ============ -->
+  <section class="section" id="quiz">
+    <div class="section-kicker">
+      <span class="klabel">Check yourself</span>
+      <h2>Three questions before you go 🎯 <span class="tag exercise">◐ 90 seconds</span></h2>
+    </div>
+    <div class="quiz-q" data-answer="1">
+      <p class="qtext">1 · In MAST v3, which category holds the largest share of documented failures, and what does that imply for your roadmap?</p>
+      <button class="qopt" type="button">A · Task verification at 23.5% - so invest in an LLM judge before anything else</button>
+      <button class="qopt" type="button">B · Specification and system design at 44.4% - and within it, step repetition at 15.7% plus unaware-of-termination at 12.4% are 28% of failures that a span count detects, so the first work is control-loop instrumentation and hard caps, not a better model</button>
+      <button class="qopt" type="button">C · Inter-agent misalignment at 32.35%, which means the fix is always a better system prompt</button>
+      <p class="qwhy">The headline of MAST is that the largest bucket is not "the model was dumb". It is design. And the two biggest modes inside it are countable: the same step executed repeatedly, and an agent that does not know it is finished. Both show in span counts and in the <code>gen_ai.invoke_agent.tool_calls</code> histogram. Note the version: v3 is 44.4 / 32.35 / 23.5, and the widely quoted 41.8 / 36.9 / 21.3 are the earlier v1/v2 figures.</p>
+    </div>
+    <div class="quiz-q" data-answer="2">
+      <p class="qtext">2 · A leaf <code>execute_tool</code> span is in error. The agent reads the error text, apologises in prose, and returns a confident answer. The root span is OK and the HTTP status is 200. Which detector catches this?</p>
+      <button class="qopt" type="button">A · An error-rate alert on the root span, since the error is somewhere in the trace</button>
+      <button class="qopt" type="button">B · A p95 latency alert, because absorbed errors are slower</button>
+      <button class="qopt" type="button">C · An assertion on the output <em>content</em> - a post-condition such as "the answer must cite a row id returned in this trace" - because status propagation has already been broken by design and no status-based rule can see it</button>
+      <p class="qwhy">This is the absorbed pattern, and it is MAST's reasoning-action mismatch at 13.2%. The whole point is that the status signal was consumed by your own exception handler, so nothing status-based recovers it. The Beacon incident is exactly this shape: a swallowed warehouse timeout, a 19.4-hour-old cache entry served as fresh, and every span green. Assert on what the user received, not on whether your code threw.</p>
+    </div>
+    <div class="quiz-q" data-answer="0">
+      <p class="qtext">3 · One prompt, temperature 0, 1000 completions, 80 unique results, all identical through token 102. What is the operational consequence?</p>
+      <button class="qopt" type="button">A · You cannot reproduce a production trace by replaying it, because the batch shape - and therefore other users' load - is an uncontrolled input, so you must capture enough of the run at the time it happens</button>
+      <button class="qopt" type="button">B · The GPU is nondeterministic, so pin a deterministic kernel and replay normally</button>
+      <button class="qopt" type="button">C · Set temperature to 0 in production and the problem disappears</button>
+      <p class="qwhy">The cause is not GPU nondeterminism - the kernels are run-to-run deterministic but not batch-invariant, and batch size varies with concurrent load, so "the other concurrent users are not an 'input' to the system but rather a nondeterministic property". With batch-invariant kernels all 1000 matched. C fails twice: temperature was already 0 in the experiment, and on Claude Opus 4.7+ <code>temperature</code>, <code>top_p</code> and <code>top_k</code> are deprecated and return 400 on non-default values. Capture, do not replay - which is the argument for tracing.</p>
+    </div>
+    <p class="quiz-score"></p>
+  </section>
+
+  <!-- ============ CHEAT SHEET ============ -->
+  <section class="cheat" id="cheatsheet">
+    <h3>Builder session 6 cheat sheet <span>· pin this</span></h3>
+    <div class="grid-2">
+      <div class="cheat-item"><b>MAST v3, not v1</b><span>44.4 / 32.35 / 23.5 for specification, misalignment, verification. The circulated 41.8 / 36.9 / 21.3 are v1/v2. Always name the version.</span></div>
+      <div class="cheat-item"><b>The headline</b><span>The biggest bucket is design, not model capability. Step repetition 15.7% + unaware-of-termination 12.4% = 28% of failures that a span count finds.</span></div>
+      <div class="cheat-item"><b>Absorbed errors</b><span>Leaf span in error, root span OK, plausible answer returned. MAST reasoning-action mismatch, 13.2%. Only an assertion on output content catches it.</span></div>
+      <div class="cheat-item"><b>The four HTTP 200 failures</b><span>Empty 2-3 token <code>end_turn</code>; <code>max_tokens</code> AND <code>model_context_window_exceeded</code>; <code>refusal</code>; your own caught exception. Zero of them raise an error.</span></div>
+      <div class="cheat-item"><b>Context rot</b><span>Quality decays well before the limit. Plot a canary score against input length, not against the limit. Shuffled haystacks beat structured ones.</span></div>
+      <div class="cheat-item"><b>Alert on remaining, not on 429</b><span>Watch <code>anthropic-ratelimit-*remaining</code> trend to zero. Token-bucket enforcement means 60 RPM can be enforced as 1 per second, so bursts fail under quota.</span></div>
+      <div class="cheat-item"><b>Timeout signature</b><span>A dangling child span with no end timestamp, plus a p99 clipped flat at your client timeout. A flat p99 measures your config, not your system.</span></div>
+      <div class="cheat-item"><b>Capture, do not replay</b><span>1000 completions at temperature 0 gave 80 unique outputs, diverging at token 103. Concurrent load is an uncontrolled input. Whatever you needed, you needed to capture it live.</span></div>
+    </div>
+  </section>
+
+  <footer class="pagefoot">
+    <span>Builder session 6 of 10 · learn-ai-observability-with-phoebe · by Phoebe Fu &nbsp;·&nbsp; 📚 <a href="https://phoebefu6.github.io/learn-with-phoebe/">Learn with Phoebe ↗</a></span>
+    <span><a href="../index.html">← Course home</a> &nbsp;·&nbsp; <a href="b7-sampling.html">Next: Sampling and its own cost →</a></span>
+  </footer>
+
+</main>
+
+<script src="../assets/app.js?v=2"></script>
+</body>
+</html>

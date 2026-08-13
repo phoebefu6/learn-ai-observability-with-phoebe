@@ -1,0 +1,472 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Builder session 7 · Sampling and its own cost - learn ai observability with phoebe</title>
+<link rel="stylesheet" href="../assets/style.css?v=2">
+</head>
+<body>
+
+<div class="toolbar">
+  <div class="wrap">
+    <span class="crumb"><a href="../index.html">learn-ai-observability-with-phoebe</a> / Builder session 7 of 10</span>
+    <button class="btn" id="toggle-all" type="button">Expand all</button>
+    <button class="btn primary" id="zoom-toggle" type="button">Projector zoom: off</button>
+  </div>
+</div>
+
+<header class="masthead">
+  <div class="wrap">
+    <div class="eyebrow">Learn AI Observability with Phoebe · Builder track · Session 7 of 10</div>
+    <h1>Sampling and its own cost: <span class="accent">you want the slow traces, and head sampling cannot give them to you</span></h1>
+    <p class="sub">Sessions b1 to b6 taught you to emit more. This session is the invoice. Storing every span from every agent run is not a serious plan, so you sample - and the moment you sample, you are making a decision about which incidents you will be able to investigate. Head sampling makes that decision before anything has happened, which is exactly the wrong moment for an agent. We build the tail-sampling config that fixes it, walk into the 30-second trap that silently breaks it, and then count what your new attributes cost as metric dimensions.</p>
+    <div class="chip-row">
+      <span class="chip level">🟠 Builder track</span>
+      <span class="chip audience">AI engineers · platform engineers · technical PMs</span>
+      <span class="chip time">45 min</span>
+    </div>
+    <div class="agenda">
+      <span class="a1" style="flex:1">0-3 · Welcome</span>
+      <span class="a2" style="flex:4">3-17 · Head vs tail, and why LLM traces differ</span>
+      <span class="a3" style="flex:5">17-40 · Build-along: the config and the cardinality audit</span>
+      <span class="a4" style="flex:1">40-45 · Q&amp;A</span>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <!-- ============ INTRO ============ -->
+  <section class="section" id="intro">
+    <div class="section-kicker">
+      <span class="klabel">Part 0</span>
+      <h2>Sampling is not a cost control. It is a decision about which incidents you can solve</h2>
+    </div>
+    <p class="lede">Evals tell you whether it works. Observability tells you what actually happened - for the requests you kept. Everybody frames sampling as a budget question, and it is one, but that framing hides the sharp edge. A sampling rule is a standing decision about which future incidents will be investigable and which will not, taken by someone who does not yet know what the incident will be. Session b6 gave you a detector for every failure mode. Every one of those detectors is worthless on a trace you threw away.</p>
+    <div class="legend">
+      <span class="pill solid">Live - presented in session</span>
+      <span class="pill light">Self-study - read after class</span>
+      <span class="pill inkpill">Official sources covered</span>
+    </div>
+    <div class="callout win">
+      <strong>★ What you walk out with today</strong>
+      Why head sampling structurally cannot keep your error traces, the two tail decisions LLM apps actually need and why both are tail decisions by definition, a working <code>tail_sampling</code> config with the four policies that matter, the <code>decision_wait</code> trap that turns your observability pipeline into a silent correctness bug, and a cardinality rule you can defend in a budget meeting: unbounded ids live on spans, never on metrics.
+    </div>
+    <div class="callout tip">
+      <strong>The one-line version</strong>
+      You want the slow traces and the failed traces. Slowness and failure are properties of a finished trace. Head sampling decides at the first span. Therefore head sampling cannot give you the traces you want, and no ratio you pick will change that.
+    </div>
+  </section>
+
+  <!-- ============ PART 1 ============ -->
+  <section class="section" id="head-vs-tail">
+    <div class="section-kicker">
+      <span class="klabel">Part 1 · when the decision is made</span>
+      <h2>Head sampling cannot see the future <span class="tag concept">8 min live</span></h2>
+    </div>
+    <p class="lede">The whole distinction is a timing question, and the diagram is the argument. Head sampling makes its decision at the root span. Tail sampling makes it after every span in the trace has arrived. Everything else follows from those two clocks.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 400" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Head sampling decides at the first span, when forty more spans do not yet exist. Tail sampling decides after all forty-one spans have arrived, which is the only moment at which error presence and total latency are knowable.">
+        <style>
+          .h1H { font: 700 13px Inter, sans-serif; fill: #1B2230; }
+          .h1M { font: 400 10.5px ui-monospace, Menlo, monospace; fill: #FFFFFF; }
+          .h1X { font: 400 11px Inter, sans-serif; fill: #66707E; }
+          .h1R { font: 400 11px Inter, sans-serif; fill: #991B1B; }
+          .h1K { font: 700 12.5px Inter, sans-serif; fill: #08323A; }
+        </style>
+
+        <text class="h1H" x="24" y="32">Head sampling: the decision is made at the first span, before anything has happened</text>
+        <rect x="24" y="44" width="832" height="124" rx="10" fill="#EDF2FB" stroke="#AFC0E4" stroke-width="1.5"/>
+        <rect x="44" y="60" width="124" height="26" rx="6" fill="#0C1F3F"/>
+        <text class="h1M" x="54" y="77">DECIDE  t=0</text>
+        <rect x="180" y="60" width="110" height="26" rx="6" fill="#16305C"/>
+        <text class="h1M" x="190" y="77">invoke_agent</text>
+        <rect x="302" y="64" width="32" height="18" rx="4" fill="#FFFFFF" stroke="#C7CFDA" stroke-dasharray="3 3"/>
+        <rect x="340" y="64" width="32" height="18" rx="4" fill="#FFFFFF" stroke="#C7CFDA" stroke-dasharray="3 3"/>
+        <rect x="378" y="64" width="32" height="18" rx="4" fill="#FFFFFF" stroke="#C7CFDA" stroke-dasharray="3 3"/>
+        <rect x="416" y="64" width="32" height="18" rx="4" fill="#FFFFFF" stroke="#C7CFDA" stroke-dasharray="3 3"/>
+        <rect x="454" y="64" width="32" height="18" rx="4" fill="#FFFFFF" stroke="#C7CFDA" stroke-dasharray="3 3"/>
+        <rect x="492" y="64" width="32" height="18" rx="4" fill="#FFFFFF" stroke="#C7CFDA" stroke-dasharray="3 3"/>
+        <rect x="530" y="64" width="32" height="18" rx="4" fill="#FFFFFF" stroke="#C7CFDA" stroke-dasharray="3 3"/>
+        <rect x="568" y="64" width="32" height="18" rx="4" fill="#FFFFFF" stroke="#C7CFDA" stroke-dasharray="3 3"/>
+        <rect x="606" y="64" width="32" height="18" rx="4" fill="#FFFFFF" stroke="#C7CFDA" stroke-dasharray="3 3"/>
+        <rect x="644" y="64" width="32" height="18" rx="4" fill="#FFFFFF" stroke="#C7CFDA" stroke-dasharray="3 3"/>
+        <rect x="682" y="64" width="32" height="18" rx="4" fill="#FFFFFF" stroke="#C7CFDA" stroke-dasharray="3 3"/>
+        <rect x="720" y="64" width="32" height="18" rx="4" fill="#FFFFFF" stroke="#C7CFDA" stroke-dasharray="3 3"/>
+        <rect x="758" y="64" width="32" height="18" rx="4" fill="#FFFFFF" stroke="#C7CFDA" stroke-dasharray="3 3"/>
+        <text class="h1X" x="302" y="106">40 more spans that do not exist yet. The sampler sees none of them.</text>
+        <text class="h1R" x="44" y="132">"Head sampling cannot sample based on complete trace data." You cannot guarantee</text>
+        <text class="h1R" x="44" y="150">capturing error traces, because at the moment of the decision there is no error yet.</text>
+
+        <text class="h1H" x="24" y="200">Tail sampling: the decision waits until every span in the trace has arrived</text>
+        <rect x="24" y="212" width="832" height="134" rx="10" fill="#E4F6F9" stroke="#0891A6" stroke-width="1.5"/>
+        <rect x="44" y="228" width="110" height="26" rx="6" fill="#16305C"/>
+        <text class="h1M" x="54" y="245">invoke_agent</text>
+        <rect x="166" y="232" width="32" height="18" rx="4" fill="#3F62A8"/>
+        <rect x="204" y="232" width="32" height="18" rx="4" fill="#3F62A8"/>
+        <rect x="242" y="232" width="32" height="18" rx="4" fill="#3F62A8"/>
+        <rect x="280" y="232" width="32" height="18" rx="4" fill="#3F62A8"/>
+        <rect x="318" y="232" width="32" height="18" rx="4" fill="#3F62A8"/>
+        <rect x="356" y="232" width="32" height="18" rx="4" fill="#3F62A8"/>
+        <rect x="394" y="232" width="32" height="18" rx="4" fill="#3F62A8"/>
+        <rect x="432" y="232" width="32" height="18" rx="4" fill="#3F62A8"/>
+        <rect x="470" y="232" width="32" height="18" rx="4" fill="#3F62A8"/>
+        <rect x="508" y="232" width="32" height="18" rx="4" fill="#3F62A8"/>
+        <rect x="546" y="232" width="32" height="18" rx="4" fill="#3F62A8"/>
+        <rect x="584" y="232" width="32" height="18" rx="4" fill="#991B1B"/>
+        <rect x="636" y="228" width="200" height="26" rx="6" fill="#0C1F3F"/>
+        <text class="h1M" x="648" y="245">DECIDE  t=end  41 spans</text>
+        <text class="h1X" x="44" y="272">Now the two decisions LLM apps actually need are possible: sample every trace containing</text>
+        <text class="h1X" x="44" y="290">an error, and sample on overall latency. Both depend on information that exists only</text>
+        <text class="h1X" x="44" y="308">after the loop finishes, which is the definition of a tail decision.</text>
+        <text class="h1K" x="44" y="330">A slow trace IS the runaway loop - and at root-span time the agent made zero tool calls.</text>
+
+        <rect x="24" y="368" width="14" height="14" rx="3" fill="#0891A6"/>
+        <text class="h1K" x="48" y="380">LLM traces are low-volume high-value. Uniform 1% head sampling keeps 1% of the boring ones.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - the same trace, two decision clocks, and what each clock can possibly know</figcaption>
+    </figure>
+
+    <details class="card" open>
+      <summary><span class="mode live">Live</span>What head sampling can act on, and why it is not enough here<span class="mini">4 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p><code>OTEL_TRACES_SAMPLER</code> takes nine values, and the default is <strong><code>parentbased_always_on</code></strong> - which means unless somebody changed it, you are keeping everything and the cost conversation has simply not started yet. The nine cover the always-on, always-off and ratio families, each with a <code>parentbased_</code> variant, plus the remote-sampler options. Check the exact spellings for your SDK version rather than trusting a blog post.</p>
+        <p>The GenAI conventions are helpful about what a head sampler <em>can</em> use. Five attributes SHOULD be provided at span creation, which makes them available to the sampling decision: <code>gen_ai.operation.name</code>, <code>gen_ai.provider.name</code>, <code>gen_ai.request.model</code>, <code>server.address</code> and <code>server.port</code>. That is the low-cardinality set, and it is also what a <code>string_attribute</code> tail policy can match on.</p>
+        <p>Notice what is missing from that list, and notice that it could not be otherwise. Nothing about the outcome. Nothing about duration. Nothing about token counts. Nothing about whether a tool failed. A head sampler can express "keep 20% of Opus traffic and 2% of Haiku traffic", which is a real and useful thing to say. It cannot express "keep the ones that broke", because at span creation nothing has broken yet.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode self">Self-study</span>Why the LLM case is different from HTTP traffic<span class="mini">3 min read</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>Uniform head sampling was designed for a workload that AI applications do not have. Two differences do all the work.</p>
+        <ul>
+          <li><strong>Volume and value are inverted.</strong> A web service emits millions of near-identical request traces, so 1% is a fine statistical sample of a homogeneous population. An agent product emits far fewer traces, each expensive to produce, each meaningfully different from the next, and each one attached to a named user who might complain. Uniform 1% sampling on that population throws away the interesting ones and faithfully preserves 1% of the boring ones.</li>
+          <li><strong>Slowness is the symptom, not the side effect.</strong> In HTTP land a slow trace is usually a slow dependency. In agent land a slow trace is frequently the failure itself: the runaway loop, the retry storm, the agent that did not know it was finished. Session b6 put a number on that - step repetition at 15.7% plus unaware-of-termination at 12.4%. Sampling on latency is therefore sampling on your most common failure category, and it is only possible at the tail.</li>
+        </ul>
+        <p>There is a corollary worth saying out loud to whoever owns the budget. The correct answer for AI traces is usually not a lower ratio. It is a <em>selective</em> policy: keep 100% of errors, 100% of slow traces, 100% of high-span-count traces, and a small ratio of the ordinary ones. That is often cheaper than a flat 10% and dramatically more useful.</p>
+      </div>
+    </details>
+  </section>
+
+  <!-- ============ PART 2 ============ -->
+  <section class="section" id="tail-processor">
+    <div class="section-kicker">
+      <span class="klabel">Part 2 · the processor</span>
+      <h2>The <code>tail_sampling</code> processor, concretely <span class="tag concept">7 min live</span></h2>
+    </div>
+    <p class="lede">Tail sampling is not a flag you flip. It is a stateful component in the middle of your collector pipeline with four operational facts attached to it, and each one has bitten a real deployment.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 350" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Collector pipeline: otlp receiver, then k8sattributes, then tail_sampling, then exporter. Four operational facts, and the decision_wait trap where 30 seconds default meets 7200 second workflow buckets.">
+        <style>
+          .t2H { font: 700 13px Inter, sans-serif; fill: #1B2230; }
+          .t2T { font: 700 12.5px Inter, sans-serif; fill: #FFFFFF; }
+          .t2S { font: 400 11px Inter, sans-serif; fill: #AFC0E4; }
+          .t2N { font: 700 12.5px Inter, sans-serif; fill: #1B2230; }
+          .t2X { font: 400 11px Inter, sans-serif; fill: #66707E; }
+          .t2R { font: 400 11px Inter, sans-serif; fill: #991B1B; }
+          .t2RB { font: 700 13px Inter, sans-serif; fill: #991B1B; }
+        </style>
+
+        <text class="t2H" x="24" y="30">Where tail_sampling must sit, and what it holds in memory</text>
+
+        <rect x="24" y="46" width="150" height="48" rx="9" fill="#3F62A8"/>
+        <text class="t2T" x="40" y="68">otlp receiver</text>
+        <text class="t2S" x="40" y="84">all spans arrive</text>
+        <line x1="176" y1="70" x2="192" y2="70" stroke="#66707E" stroke-width="1.5"/>
+        <polygon points="192,66 199,70 192,74" fill="#66707E"/>
+
+        <rect x="200" y="46" width="180" height="48" rx="9" fill="#16305C"/>
+        <text class="t2T" x="216" y="68">k8sattributes</text>
+        <text class="t2S" x="216" y="84">adds pod context</text>
+        <line x1="382" y1="70" x2="398" y2="70" stroke="#66707E" stroke-width="1.5"/>
+        <polygon points="398,66 405,70 398,74" fill="#66707E"/>
+
+        <rect x="406" y="46" width="230" height="48" rx="9" fill="#0C1F3F"/>
+        <text class="t2T" x="422" y="68">tail_sampling</text>
+        <text class="t2S" x="422" y="84">beta · stateful · in-memory</text>
+        <line x1="638" y1="70" x2="654" y2="70" stroke="#66707E" stroke-width="1.5"/>
+        <polygon points="654,66 661,70 654,74" fill="#66707E"/>
+
+        <rect x="662" y="46" width="194" height="48" rx="9" fill="#0891A6"/>
+        <text class="t2T" x="678" y="68">exporter</text>
+        <text class="t2S" x="678" y="84" fill="#E4F6F9">only survivors leave</text>
+
+        <rect x="24" y="112" width="832" height="112" rx="10" fill="#EDF2FB" stroke="#AFC0E4" stroke-width="1.5"/>
+        <text class="t2N" x="44" y="134">Four facts that decide whether it works at all</text>
+        <text class="t2X" x="44" y="156">1 · "All spans for a given trace MUST be received by the same collector instance."</text>
+        <text class="t2X" x="44" y="174">2 · It groups by trace_id internally, so groupbytrace is NOT needed in front of it.</text>
+        <text class="t2X" x="44" y="192">3 · It must sit AFTER context processors like k8sattributes, or their attributes are gone.</text>
+        <text class="t2X" x="44" y="210">4 · It is explicitly stateful: num_traces defaults to 50000 traces held in memory.</text>
+
+        <rect x="24" y="244" width="832" height="100" rx="10" fill="#FEF2F2" stroke="#FCA5A5" stroke-width="1.5"/>
+        <text class="t2RB" x="44" y="268">The trap: decision_wait defaults to 30s. Workflow buckets go to 7200s.</text>
+        <text class="t2R" x="44" y="290">A 30-second wait against a 20-minute agent workflow decides before the trace is</text>
+        <text class="t2R" x="44" y="308">finished. Nothing errors. Your pipeline is silently, confidently wrong about which</text>
+        <text class="t2R" x="44" y="326">traces it kept - and the ones it lost are exactly the slow ones you were after.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - pipeline placement, the four operational facts, and the 30-second trap</figcaption>
+    </figure>
+
+    <div class="callout warn">
+      <strong>★ The teachable trap: <code>decision_wait: 30s</code> against a 7200s workflow</strong>
+      <code>decision_wait</code> defaults to <strong>30 seconds</strong>. The GenAI conventions define <code>gen_ai.invoke_workflow.duration</code> with buckets running 1, 5, 10, 30, 60, 120, 300, 600, 1800, 3600, <strong>7200</strong> - the spec authors expect agent workflows to run for up to two hours. If your workflows take twenty minutes and your <code>decision_wait</code> is at its default, the processor evaluates its policies against a partial trace and moves on. There is no error, no warning, no metric that goes red. Your latency policy never sees the total latency, your error policy never sees the error that happened at minute twelve, and every dashboard downstream reports confidently on a biased sample. <strong>This is not a performance problem or a tuning preference. It is a silent correctness bug in your observability pipeline, and the traces it corrupts are precisely the slow ones you built the policy to catch.</strong> Set <code>decision_wait</code> from the measured p99 of your longest workflow, and re-measure it whenever the agent gains a tool.
+    </div>
+
+    <div class="prompt-box good"><span class="label">★ collector config · the four policies that matter for an agent workload</span>processors:
+  k8sattributes: {}
+  tail_sampling:
+    decision_wait: 300s
+    num_traces: 50000
+    policies:
+      - name: keep-all-errors
+        type: status_code
+        status_code:
+          status_codes: [ERROR]
+      - name: keep-slow-traces
+        type: latency
+        latency:
+          threshold_ms: 15000
+      - name: keep-runaway-loops
+        type: span_count
+        span_count:
+          min_spans: 40
+
+service:
+  pipelines:
+    traces:
+      processors: [k8sattributes, tail_sampling]</div>
+
+    <div class="callout tip">
+      <strong>Honesty note on the snippet</strong>
+      The component name, <code>decision_wait</code>, <code>num_traces</code>, the policy <em>types</em> and the <code>sampling_strategy</code> default of <code>trace-complete</code> are all verified in this course's source map. The nested sub-keys inside each policy are not, and the processor is <strong>beta</strong>, which means they are allowed to move between collector releases. Read the processor README for the exact version you are deploying, and treat this snippet as the shape rather than the spelling.
+    </div>
+
+    <h3 style="font-size:1rem;margin:1.6rem 0 .4rem;">Seventeen policies exist. Four of them are the LLM ones</h3>
+    <table class="clean">
+      <tr><th>Policy</th><th>What it decides on</th><th>Why it matters for an agent</th></tr>
+      <tr><td><code>status_code</code></td><td>Whether any span in the trace carries <code>ERROR</code></td><td>The decision head sampling structurally cannot make. Keep 100% of these - they are rare and they are the whole reason you have a trace store</td></tr>
+      <tr><td><code>latency</code></td><td>Total trace duration</td><td>A slow agent trace is usually the runaway loop itself, not a slow dependency. This is the single highest-yield policy in an LLM pipeline</td></tr>
+      <tr><td><strong><code>span_count</code></strong></td><td>How many spans the trace contains</td><td>Catches a runaway loop by <strong>shape</strong>. A trace with more than N spans is by definition an agent that did not converge - no attribute needed, no content read, no model involved. The cheapest detector in this course</td></tr>
+      <tr><td><code>ottl_condition</code></td><td>An OTTL expression over spans and attributes</td><td>Spec-aware rules: keep traces where <code>gen_ai.response.finish_reasons</code> contains a truncation, or where a tool span errored. The docs call it "highly recommended... to avoid breaking changes", so prefer it over the older attribute policies</td></tr>
+      <tr><td><code>string_attribute</code></td><td>A named attribute's string value</td><td>Works on the low-cardinality sampling-time set - <code>gen_ai.provider.name</code>, <code>gen_ai.request.model</code>, <code>server.address</code>. Useful for per-model or per-tenant ratios, and the one policy that a head sampler could also have expressed</td></tr>
+    </table>
+
+    <details class="card">
+      <summary><span class="mode self">Self-study</span>The "same collector instance" requirement is an architecture constraint<span class="mini">3 min read</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>"All spans for a given trace MUST be received by the same collector instance." That single sentence is the reason tail sampling is an infrastructure project rather than a config change, and it is the fact most often discovered late.</p>
+        <p>If you run a fleet of collectors behind a round-robin load balancer, spans from one trace land on different instances, each instance sees a fragment, and each fragment fails your policies for different reasons. The standard shape is a two-layer collector deployment: a stateless first layer that receives and routes by trace id, and a second layer that owns tail sampling and holds state. Because the processor already groups by trace id internally, you do not need <code>groupbytrace</code> in front of it - a common piece of stale advice.</p>
+        <p>Two more consequences of statefulness that belong in your capacity plan. <code>num_traces</code> defaults to 50000 traces held in memory, so the memory footprint scales with your trace rate multiplied by <code>decision_wait</code> - which means the fix for the 30-second trap has a bill attached: raising <code>decision_wait</code> to 300s raises the number of in-flight traces roughly tenfold. And because the state is in memory, a collector restart loses every in-flight decision. Neither of those is a reason not to do it; both are reasons to size it before you ship it.</p>
+      </div>
+    </details>
+  </section>
+
+  <!-- ============ PART 3 ============ -->
+  <section class="section" id="cardinality">
+    <div class="section-kicker">
+      <span class="klabel">Part 3 · the other bill</span>
+      <h2>Cardinality: the same attribute costs linearly on a span and multiplicatively on a metric <span class="tag concept">6 min live</span></h2>
+    </div>
+    <p class="lede">Session b6 had you add loop indices, args hashes, cache ages and conversation ids. That is the right instinct on spans and a catastrophe on metrics, and the difference is arithmetic rather than taste.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 362" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Bounded dimensions like model name and operation name produce a few hundred time series. Unbounded ids like conversation id produce one histogram series per conversation. Spans cost storage linearly, metrics cost series multiplicatively.">
+        <style>
+          .c3H { font: 700 13px Inter, sans-serif; fill: #1B2230; }
+          .c3T { font: 700 12.5px Inter, sans-serif; fill: #08323A; }
+          .c3M { font: 400 11px ui-monospace, Menlo, monospace; fill: #08323A; }
+          .c3X { font: 400 11px Inter, sans-serif; fill: #66707E; }
+          .c3RB { font: 700 12.5px Inter, sans-serif; fill: #991B1B; }
+          .c3RM { font: 400 11px ui-monospace, Menlo, monospace; fill: #991B1B; }
+          .c3R { font: 400 11px Inter, sans-serif; fill: #991B1B; }
+          .c3W { font: 700 12.5px Inter, sans-serif; fill: #FFFFFF; }
+          .c3S { font: 400 11px Inter, sans-serif; fill: #AFC0E4; }
+        </style>
+
+        <text class="c3H" x="24" y="30">Metrics cost scales with distinct time series: the Cartesian product of label values</text>
+
+        <rect x="24" y="46" width="832" height="104" rx="10" fill="#E4F6F9" stroke="#0891A6" stroke-width="1.5"/>
+        <text class="c3T" x="44" y="68">Bounded dimensions - safe as metric labels</text>
+        <text class="c3M" x="44" y="90">gen_ai.request.model (tens)  x  gen_ai.operation.name (18)  x  gen_ai.token.type (2)</text>
+        <text class="c3X" x="44" y="112">A few hundred time series, one 14-bucket histogram each. This is exactly what the spec's</text>
+        <text class="c3X" x="44" y="130">metric attribute sets are designed to produce, and it is affordable by construction.</text>
+
+        <rect x="24" y="170" width="832" height="104" rx="10" fill="#FEF2F2" stroke="#FCA5A5" stroke-width="1.5"/>
+        <text class="c3RB" x="44" y="192">Unbounded ids - safe on spans, never as metric labels</text>
+        <text class="c3RM" x="44" y="214">gen_ai.conversation.id  x  gen_ai.response.id  x  gen_ai.tool.call.id  x  gen_ai.agent.id</text>
+        <text class="c3R" x="44" y="236">One 14-bucket histogram series per conversation. On a span this costs storage linearly.</text>
+        <text class="c3R" x="44" y="254">As a metric dimension it costs series multiplicatively - the bill nobody predicted.</text>
+
+        <rect x="24" y="300" width="832" height="52" rx="10" fill="#0C1F3F"/>
+        <text class="c3W" x="44" y="324">The spec's exclusion of every id from every metric attribute set IS the guardrail.</text>
+        <text class="c3S" x="44" y="342">Spans: cardinality costs storage linearly. Metrics: cardinality costs series multiplicatively.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - the same attribute, two cost curves, and why the spec leaves ids out of metrics</figcaption>
+    </figure>
+
+    <p><code>gen_ai.request.model</code> is bounded at tens of values, so putting it on a metric is fine forever. <code>gen_ai.conversation.id</code> is unbounded by definition - one value per conversation, growing with your product. Use it as a metric dimension and <code>gen_ai.client.token.usage</code> becomes one 14-bucket histogram series per conversation, multiplied again by <code>gen_ai.token.type</code> and by the model. That is not a metric any more; it is a very expensive log.</p>
+
+    <p>The reason every metric attribute set in the GenAI conventions deliberately excludes ids - no conversation id, no response id, no tool call id, no user id - is not an oversight to be worked around. <strong>The exclusion is the guardrail.</strong> When you find yourself wanting to add an id to a metric, the answer is almost always that you wanted a trace query, not a metric.</p>
+
+    <h3 style="font-size:1rem;margin:1.6rem 0 .4rem;">Where each attribute belongs</h3>
+    <table class="clean">
+      <tr><th>Attribute</th><th>Bound</th><th>On a span</th><th>As a metric label</th></tr>
+      <tr><td><code>gen_ai.provider.name</code></td><td>16 values</td><td>Yes</td><td>Yes - it is in the spec's metric sets</td></tr>
+      <tr><td><code>gen_ai.operation.name</code></td><td>18 values</td><td>Yes</td><td>Yes</td></tr>
+      <tr><td><code>gen_ai.request.model</code></td><td>Tens</td><td>Yes</td><td>Yes</td></tr>
+      <tr><td><code>gen_ai.token.type</code></td><td>2 values</td><td>Yes</td><td>Yes - and required on <code>gen_ai.client.token.usage</code></td></tr>
+      <tr><td><code>gen_ai.conversation.id</code></td><td><strong>Unbounded</strong></td><td>Yes - it is the join key that reassembles a thread across traces</td><td><strong>Never</strong></td></tr>
+      <tr><td><code>gen_ai.response.id</code></td><td><strong>Unbounded</strong></td><td>Yes</td><td><strong>Never</strong></td></tr>
+      <tr><td><code>gen_ai.tool.call.id</code></td><td><strong>Unbounded</strong></td><td>Yes</td><td><strong>Never</strong></td></tr>
+      <tr><td><code>gen_ai.agent.id</code></td><td><strong>Unbounded</strong></td><td>Yes</td><td><strong>Never</strong></td></tr>
+      <tr><td><code>gen_ai.request.previous_response.id</code></td><td><strong>Unbounded</strong></td><td>Yes</td><td><strong>Never</strong></td></tr>
+      <tr><td>The memory ids, <code>gen_ai.data_source.id</code></td><td><strong>Unbounded</strong></td><td>Yes</td><td><strong>Never</strong></td></tr>
+    </table>
+
+    <div class="callout tip">
+      <strong>What could not be verified, said plainly</strong>
+      This course's source map has no verifiable per-unit billing figure from any vendor for either spans or metric series, with one exception: Datadog documents that "billing is based on the volume of spans you send". So the cardinality argument on this page is made <strong>mechanically</strong> - linear in storage on spans, multiplicative in series on metrics - and not with a dollar figure. Do the multiplication against your own contract before you quote a number to anybody, and re-verify it per cohort.
+    </div>
+  </section>
+
+  <!-- ============ DEMO 1 ============ -->
+  <section class="section" id="demo-1">
+    <div class="section-kicker">
+      <span class="klabel">Demo 1 of 2</span>
+      <h2>Write Beacon's tail-sampling policy, then set <code>decision_wait</code> honestly <span class="tag demo">★ 12 min · everyone builds</span></h2>
+    </div>
+    <p class="lede">Beacon's Insight Bot was invisible for a week partly because nobody had ever looked at one of its traces. We are going to guarantee that the next bad one is kept, and that the config is sized against the real workflow rather than against a default.</p>
+
+    <div class="steps">
+      <div class="step"><p>Measure first. Find the p99 total duration of your longest agent workflow over the last month. Not the p50, not the model-call duration - the whole root span, including the retries and the runaway ones. Write the number down; every other decision on this page hangs off it.</p></div>
+      <div class="step"><p>Set <code>decision_wait</code> above that p99 with headroom, and then check what you have just committed to in memory. In-flight traces scale roughly with trace rate multiplied by <code>decision_wait</code>, and <code>num_traces</code> defaults to 50000. Going from 30s to 300s multiplies your in-flight count by ten. If that exceeds 50000, raise <code>num_traces</code> deliberately and size the collector for it, rather than discovering the eviction later as mysteriously missing traces.</p></div>
+      <div class="step"><p>Add the three policies from the snippet: <code>status_code</code> on <code>ERROR</code>, <code>latency</code> with a threshold set from your own p95, and <code>span_count</code> with <code>min_spans</code> set just above the top of your normal range. For Beacon the normal range is a handful of spans, so the loop detector triggers early and cheaply. Remember the policies are OR-ed: a trace matching any one of them is kept.</p></div>
+      <div class="step"><p>Now the Beacon-specific one, and the reason <code>ottl_condition</code> is worth learning. Beacon's incident produced <strong>no error status at all</strong> - the exception was swallowed. So add a condition that keeps any trace carrying the b6 attributes: <code>beacon.fallback.used</code>, <code>beacon.truncated</code>, <code>beacon.refused</code>, <code>beacon.empty_end_turn</code>. Session b6 made those failures visible; this step makes sure the trace containing them survives long enough for you to read it.</p></div>
+      <div class="step"><p>Check pipeline order and instance affinity. <code>tail_sampling</code> must sit <strong>after</strong> <code>k8sattributes</code> and any other context processor, or you will be sampling on attributes that have not been attached yet. And confirm that all spans for one trace reach the same collector instance - if you are behind a plain round-robin load balancer today, that is a two-layer collector project and it is better to know now than after the config looks correct and behaves strangely.</p></div>
+      <div class="step"><p>Verify by breaking it on purpose. Send one synthetic trace that errors, one that is deliberately slow, one with 60 spans, and one that is entirely ordinary. Confirm the first three arrive at your backend and the fourth is subject to your base ratio. Then set <code>decision_wait</code> back to 30s for one minute and watch the slow trace vanish without a single warning. That is the trap, felt rather than read.</p></div>
+    </div>
+
+    <div class="callout warn">
+      <strong>The check nobody runs</strong>
+      After any sampling change, query your backend for traces you know exist and confirm they are there. A sampling pipeline has no natural failure signal - it drops things for a living, so dropping the wrong things looks exactly like working correctly. Session b8 turns this into a standing alert on instrumentation coverage: traces missing expected span types, and expected trace types missing entirely.
+    </div>
+  </section>
+
+  <!-- ============ DEMO 2 ============ -->
+  <section class="section" id="demo-2">
+    <div class="section-kicker">
+      <span class="klabel">Demo 2 of 2</span>
+      <h2>Audit your own cardinality before finance does <span class="tag demo">★ 10 min · everyone builds</span></h2>
+    </div>
+    <p class="lede">This is arithmetic, it takes ten minutes, and it has stopped real budget surprises. You are going to count the time series you currently produce, and then count the ones you would have produced if the spec had not stopped you.</p>
+
+    <div class="steps">
+      <div class="step"><p>List every label you currently attach to every metric. For each label, write down the number of distinct values it takes in a month. Multiply the counts together per metric. That product, not the number of metrics, is what you are paying for.</p></div>
+      <div class="step"><p>Now do the counterfactual. Take <code>gen_ai.client.token.usage</code>, which is a 14-bucket histogram and requires <code>gen_ai.token.type</code>. Multiply your monthly conversation count by 2 for token type and by your model count. Compare that number to the few hundred series you get from the spec's own attribute set. The ratio is the size of the mistake the spec quietly prevented you from making.</p></div>
+      <div class="step"><p>Sort your b6 attributes into two lists: span-only and metric-safe. Anything with "id" in the name goes in span-only without further discussion. <code>beacon.tool.args_sha</code> goes in span-only - a hash is unbounded by design. <code>beacon.fallback.used</code> is a boolean, so it is metric-safe and it is a genuinely useful metric dimension.</p></div>
+      <div class="step"><p>Find the shadow high-cardinality label that is not an id. The usual suspects are a free-text error message, a full URL with a query string, a prompt name that includes a version and a timestamp, or a tenant name in a system with self-service signup. None of them look like ids and all of them behave like ids.</p></div>
+      <div class="step"><p>Write the rule down where the next engineer will find it, in one line: <strong>ids and hashes go on spans, enums and booleans go on metrics, and if you want to slice a metric by something unbounded you actually wanted a trace query.</strong> Then check the spec's metric attribute sets and notice that you have just re-derived them.</p></div>
+    </div>
+
+    <div class="prompt-box good">
+      <span class="label">★ the two arithmetics, side by side</span>
+      <p>SPAN cost = spans_per_trace x traces_kept x bytes_per_span &nbsp;→&nbsp; adding one attribute is LINEAR, and adding it to a trace you already keep is nearly free &nbsp;·&nbsp; METRIC cost = distinct(label_1) x distinct(label_2) x ... x distinct(label_n) &nbsp;→&nbsp; adding one unbounded label MULTIPLIES the series count by the number of values it will ever take</p>
+    </div>
+  </section>
+
+  <!-- ============ HOMEWORK ============ -->
+  <section class="section" id="exercise">
+    <div class="section-kicker">
+      <span class="klabel">Homework</span>
+      <h2>Try it yourself - this week <span class="tag exercise">◐ 45-55 min total</span></h2>
+    </div>
+    <ul>
+      <li>Find out what your <code>OTEL_TRACES_SAMPLER</code> is actually set to in each environment. If nobody has changed it, it is <code>parentbased_always_on</code> and you are keeping everything, which means your cost conversation has not started and your sampling design has not been tested. Both are worth knowing before the invoice arrives.</li>
+      <li>Compute the p99 duration of your longest workflow and compare it to your <code>decision_wait</code>. If <code>decision_wait</code> is smaller, you have a live silent correctness bug in your observability pipeline and it is biased against exactly the traces you care about most. Fix it, then size the memory it costs.</li>
+      <li>Write one <code>ottl_condition</code> policy that keeps a failure your status codes cannot see - a truncation, a refusal, or a fallback flag from session b6. This is the step that connects the failure taxonomy to the retention policy, and it is the one most teams never take.</li>
+      <li>Do the cardinality multiplication for your three most-labelled metrics. Bring the products to whoever owns the observability budget. It is a much better conversation than "we should probably sample more".</li>
+      <li>Argue the selective case in writing: 100% of errors, 100% of slow traces, 100% of high-span-count traces, plus a small ratio of ordinary ones - versus a flat ratio across everything. Estimate both volumes from a week of real traffic. For most AI workloads the selective policy is both cheaper and more useful, and having the numbers is how you get to keep it.</li>
+    </ul>
+  </section>
+
+  <!-- ============ SOURCES ============ -->
+  <section class="section" id="official">
+    <div class="section-kicker">
+      <span class="klabel">Source material</span>
+      <h2>Official sources covered</h2>
+    </div>
+    <p class="lede">Sampling claims come from the OpenTelemetry sampling documentation and the collector-contrib <code>tail_sampling</code> processor; the bucket and attribute-set facts come from the GenAI semantic conventions. Everything unverified is marked as such.</p>
+    <div class="covered">
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Head sampling "cannot sample based on complete trace data" - so error traces cannot be guaranteed</span><span class="note">Part 1 · the structural argument, not a tuning preference</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name"><code>OTEL_TRACES_SAMPLER</code>: nine values, default <code>parentbased_always_on</code></span><span class="note">Part 1 · check exact spellings per SDK version</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Sampling-time attributes: <code>gen_ai.operation.name</code>, <code>gen_ai.provider.name</code>, <code>gen_ai.request.model</code>, <code>server.address</code>, <code>server.port</code></span><span class="note">Part 1 · the low-cardinality set a head sampler and <code>string_attribute</code> can act on</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name"><code>tail_sampling</code> processor: beta, same-collector-instance requirement, groups by trace_id so <code>groupbytrace</code> is unnecessary, must follow context processors, explicitly stateful</span><span class="note">Part 2 · the four operational facts</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name"><code>decision_wait</code> default 30s, <code>num_traces</code> default 50000, <code>sampling_strategy</code> default <code>trace-complete</code></span><span class="note">Part 2 + Demo 1 · the trap and its memory cost</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name"><code>gen_ai.invoke_workflow.duration</code> buckets 1, 5, 10, 30, 60, 120, 300, 600, 1800, 3600, 7200</span><span class="note">Part 2 · 7200s versus a 30s wait is the whole trap</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Policies that matter for LLM apps: <code>latency</code>, <code>status_code: ERROR</code>, <code>span_count</code>, <code>ottl_condition</code> ("highly recommended... to avoid breaking changes")</span><span class="note">Part 2 · four of the seventeen</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Every GenAI metric attribute set excludes unbounded ids - no conversation, response, tool-call or user id</span><span class="note">Part 3 · the exclusion is the guardrail, not an oversight</span></div>
+      <div class="covered-row"><span class="status pill light">◐</span><span class="name">Nested policy sub-keys inside the yaml snippet</span><span class="note">Not in this course's source map, and the processor is beta · read the README for your collector version</span></div>
+      <div class="covered-row"><span class="status pill light">◐</span><span class="name">What to alert on once you have decided which traces to keep</span><span class="note">Named here · burn rate, the agent-loop metrics and coverage alerting are b8</span></div>
+      <div class="covered-row"><span class="status pill bare">✕</span><span class="name">Per-unit vendor billing for spans or metric time series</span><span class="note">Not verifiable. Only Datadog's "billing is based on the volume of spans you send" was confirmed. The cardinality argument here is mechanical, not priced</span></div>
+    </div>
+  </section>
+
+  <!-- ============ QUIZ ============ -->
+  <section class="section" id="quiz">
+    <div class="section-kicker">
+      <span class="klabel">Check yourself</span>
+      <h2>Three questions before you go 🎯 <span class="tag exercise">◐ 90 seconds</span></h2>
+    </div>
+    <div class="quiz-q" data-answer="2">
+      <p class="qtext">1 · Why can head sampling not be configured to keep your error traces, no matter what ratio you choose?</p>
+      <button class="qopt" type="button">A · It can, if you set the ratio to 100% for error spans</button>
+      <button class="qopt" type="button">B · It can, but only with <code>parentbased_traceidratio</code></button>
+      <button class="qopt" type="button">C · Because it decides at the first span, and "contains an error" and "was slow" are properties that only exist once the trace is finished - head sampling "cannot sample based on complete trace data"</button>
+      <p class="qwhy">This is a timing fact, not a configuration gap. At the moment a head sampler runs, the root span has just been created, the agent has made zero tool calls, nothing has errored and nothing has taken any time yet. The five attributes the spec says SHOULD be available at span creation are all inputs - operation, provider, model, server address and port - and none of them are outcomes. Tail sampling exists precisely because the two decisions LLM apps need are both tail decisions by definition.</p>
+    </div>
+    <div class="quiz-q" data-answer="0">
+      <p class="qtext">2 · Your agent workflows routinely run twelve minutes. You deploy <code>tail_sampling</code> with default settings. What happens?</p>
+      <button class="qopt" type="button">A · <code>decision_wait</code> defaults to 30s, so policies are evaluated against a partial trace and the decision is made before the workflow finishes - with no error and no warning, which makes it a silent correctness bug biased against the slow traces you were sampling for</button>
+      <button class="qopt" type="button">B · The processor blocks until the trace is complete, so it is slow but correct</button>
+      <button class="qopt" type="button">C · The trace is dropped with a logged error you can alert on</button>
+      <p class="qwhy">Nothing errors. That is what makes it teachable. <code>decision_wait</code> defaults to 30 seconds while <code>gen_ai.invoke_workflow.duration</code> defines buckets out to 7200 seconds, so the spec authors clearly expect agent workflows to run for hours. Your latency policy never sees the real total, your error policy never sees an error that happens at minute nine, and every downstream dashboard reports confidently on a biased sample. Set it from your measured p99 - and remember that in-flight traces scale with <code>decision_wait</code>, against a <code>num_traces</code> default of 50000.</p>
+    </div>
+    <div class="quiz-q" data-answer="1">
+      <p class="qtext">3 · You want to slice token usage by <code>gen_ai.conversation.id</code>. Where does that attribute belong?</p>
+      <button class="qopt" type="button">A · On the metric, since conversation-level cost is a reasonable thing to want</button>
+      <button class="qopt" type="button">B · On spans only. It is unbounded, so as a metric label it produces one 14-bucket histogram series per conversation - multiplied again by token type and model. On a span it costs storage linearly; as a metric dimension it costs series multiplicatively</button>
+      <button class="qopt" type="button">C · On both, with a sampled subset on the metric</button>
+      <p class="qwhy">Metrics cost scales with distinct time series, which is the Cartesian product of label values. <code>gen_ai.request.model</code> is bounded at tens and is safe forever. <code>gen_ai.conversation.id</code> grows with your product and never stops. That is why every metric attribute set in the GenAI conventions deliberately excludes ids: conversation, response, tool call, agent, the memory ids and <code>gen_ai.data_source.id</code>. The exclusion is the guardrail. Wanting to slice a metric by something unbounded is a reliable sign you wanted a trace query.</p>
+    </div>
+    <p class="quiz-score"></p>
+  </section>
+
+  <!-- ============ CHEAT SHEET ============ -->
+  <section class="cheat" id="cheatsheet">
+    <h3>Builder session 7 cheat sheet <span>· pin this</span></h3>
+    <div class="grid-2">
+      <div class="cheat-item"><b>The timing fact</b><span>Head decides at the first span and "cannot sample based on complete trace data". Error and latency are properties of a finished trace. Therefore tail.</span></div>
+      <div class="cheat-item"><b>Your current setting</b><span><code>OTEL_TRACES_SAMPLER</code> has 9 values and defaults to <code>parentbased_always_on</code>. If nobody changed it, you are keeping everything.</span></div>
+      <div class="cheat-item"><b>Why LLM traces are different</b><span>Low volume, high value, and a slow trace IS the runaway loop. Uniform 1% keeps 1% of the boring ones and loses the interesting ones.</span></div>
+      <div class="cheat-item"><b>★ The 30-second trap</b><span><code>decision_wait</code> defaults to 30s; <code>gen_ai.invoke_workflow.duration</code> buckets reach 7200s. A short wait is a silent correctness bug in your pipeline.</span></div>
+      <div class="cheat-item"><b><code>span_count</code></b><span>Catches a runaway loop by shape. More than N spans means the agent did not converge. No attributes, no content, no model. The cheapest detector you own.</span></div>
+      <div class="cheat-item"><b>Placement rules</b><span>All spans of a trace to the same collector instance. After <code>k8sattributes</code>. No <code>groupbytrace</code> needed. Stateful, <code>num_traces</code> default 50000 in memory.</span></div>
+      <div class="cheat-item"><b>Prefer <code>ottl_condition</code></b><span>Spec-aware and "highly recommended... to avoid breaking changes". It is how you keep failures that never set an error status.</span></div>
+      <div class="cheat-item"><b>The cardinality line</b><span>Ids and hashes on spans, enums and booleans on metrics. Spans cost storage linearly; metric labels cost series multiplicatively. The spec's id exclusion is the guardrail.</span></div>
+    </div>
+  </section>
+
+  <footer class="pagefoot">
+    <span>Builder session 7 of 10 · learn-ai-observability-with-phoebe · by Phoebe Fu &nbsp;·&nbsp; 📚 <a href="https://phoebefu6.github.io/learn-with-phoebe/">Learn with Phoebe ↗</a></span>
+    <span><a href="../index.html">← Course home</a> &nbsp;·&nbsp; <a href="b8-alerting-and-slos.html">Next: Alerting and SLOs →</a></span>
+  </footer>
+
+</main>
+
+<script src="../assets/app.js?v=2"></script>
+</body>
+</html>

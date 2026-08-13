@@ -1,0 +1,524 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Builder session 10 · Privacy and retention - learn ai observability with phoebe</title>
+<link rel="stylesheet" href="../assets/style.css?v=2">
+</head>
+<body>
+
+<div class="toolbar">
+  <div class="wrap">
+    <span class="crumb"><a href="../index.html">learn-ai-observability-with-phoebe</a> / Builder session 10 of 10</span>
+    <button class="btn" id="toggle-all" type="button">Expand all</button>
+    <button class="btn primary" id="zoom-toggle" type="button">Projector zoom: off</button>
+  </div>
+</div>
+
+<header class="masthead">
+  <div class="wrap">
+    <div class="eyebrow">Learn AI Observability with Phoebe · Builder track · Session 10 of 10</div>
+    <h1>Privacy and retention: <span class="accent">metadata at one hundred percent, content on a sample</span></h1>
+    <p class="sub">The last session, and the one where the course's own thesis meets its limit. Poor coverage hides failures. Rich content capture creates legal and security exposure. These pull in opposite directions and the resolution is not a compromise, it is a split: metadata on everything, content on a small consented sample with a short life. This session builds that split, prices the honesty of the default, and closes the course.</p>
+    <div class="chip-row">
+      <span class="chip level">🔴 Builder track</span>
+      <span class="chip audience">AI engineers · platform engineers · technical PMs</span>
+      <span class="chip time">45 min</span>
+    </div>
+    <div class="agenda">
+      <span class="a1" style="flex:1">0-3 · Welcome</span>
+      <span class="a2" style="flex:4">3-22 · The tension, the spec, the law</span>
+      <span class="a3" style="flex:5">22-40 · Build-along: redaction, then the erasure drill</span>
+      <span class="a4" style="flex:1">40-45 · Close</span>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <!-- ============ INTRO ============ -->
+  <section class="section" id="intro">
+    <div class="section-kicker">
+      <span class="klabel">Part 0</span>
+      <h2>Nine sessions arguing for more telemetry. One session on the cost of that argument</h2>
+    </div>
+    <p class="lede">Everything in this course has pushed one direction: instrument more, keep the attributes, log the tool arguments, capture what happened because you cannot replay it. This session is where that push meets data-protection law, security review, and a genuine trade-off that nobody gets to dodge. It is also the session where a vendor is on record admitting both halves of the problem about its own product, which is the most useful thing anyone has published on the subject.</p>
+    <div class="legend">
+      <span class="pill solid">Live - presented in session</span>
+      <span class="pill light">Self-study - read after class</span>
+      <span class="pill inkpill">Official sources covered</span>
+    </div>
+    <div class="callout win">
+      <strong>★ What you walk out with today</strong>
+      The core tension in a vendor's own words, the split that resolves it, the six sensitive GenAI attributes and why redacting the prompt alone is not enough, the spec's three content patterns in the spec's own order, the inverted OpenInference default, a redaction layering that keeps most of your diagnostic power, real retention numbers including the case where your model choice overrides your policy, the three GDPR Art. 5(1) principles that bite a trace store, and the PDPA scope trap.
+    </div>
+    <div class="callout tip">
+      <strong>Not legal advice</strong>
+      This page teaches the engineering consequences of published legal texts and vendor documentation, with sources named so you can check them. It is not legal advice, it is not a compliance opinion, and it is not a substitute for your own counsel or data-protection officer. Where a claim is secondary rather than primary it is marked <strong>[S]</strong>, and where a source needs re-verification the page says so.
+    </div>
+  </section>
+
+  <!-- ============ PART 1 ============ -->
+  <section class="section" id="tension">
+    <div class="section-kicker">
+      <span class="klabel">Part 1 · the tension</span>
+      <h2>One vendor, two published positions, and the split between them <span class="tag concept">7 min live</span></h2>
+    </div>
+    <p class="lede">You could argue this trade-off from first principles for an afternoon. You do not have to, because the same organisation published both halves of it within a year: the cost of protecting content, and the pattern that works anyway. Read them next to each other. That pair is this session.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 386" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Two published vendor positions: privacy controls prevent engineers from examining problematic interactions, and monitoring agent decision patterns without monitoring the contents of individual conversations. The resolution is a split: metadata on 100% of traffic, content on a small sample.">
+        <style>
+          .bXaH { font: 700 13px Inter, sans-serif; fill: #1B2230; }
+          .bXaX { font: 400 11px Inter, sans-serif; fill: #66707E; }
+          .bXaS { font: 400 10px Inter, sans-serif; fill: #66707E; }
+          .bXaB { font: 600 12.5px Inter, sans-serif; fill: #1B2230; }
+          .bXaL { font: 700 13px Inter, sans-serif; fill: #16305C; }
+          .bXaM { font: 400 10.5px ui-monospace, Menlo, monospace; fill: #FFFFFF; }
+        </style>
+
+        <text class="bXaH" x="24" y="28">The tension, stated by one vendor about itself</text>
+
+        <rect x="24" y="44" width="404" height="104" rx="10" fill="#EDF2FB" stroke="#AFC0E4" stroke-width="1.5"/>
+        <text class="bXaX" x="42" y="70">Privacy controls "prevent engineers from</text>
+        <text class="bXaX" x="42" y="88">examining the problematic interactions</text>
+        <text class="bXaX" x="42" y="106">needed to identify or reproduce bugs"</text>
+        <text class="bXaS" x="42" y="136">postmortem of three recent issues, 2025</text>
+
+        <rect x="452" y="44" width="404" height="104" rx="10" fill="#E4F6F9" stroke="#0891A6" stroke-width="1.5"/>
+        <text class="bXaX" x="470" y="70">"We monitor agent decision patterns and</text>
+        <text class="bXaX" x="470" y="88">interaction structures, all without</text>
+        <text class="bXaX" x="470" y="106">monitoring the contents of individual</text>
+        <text class="bXaX" x="470" y="124">conversations"</text>
+        <text class="bXaS" x="470" y="140">multi-agent research system, 2025</text>
+
+        <rect x="24" y="162" width="832" height="40" rx="9" fill="#FFFFFF" stroke="#C7CFDA" stroke-width="1.5"/>
+        <text class="bXaB" x="44" y="187">Both are true. They pull in opposite directions, and the resolution is not a compromise.</text>
+
+        <text class="bXaL" x="24" y="232">The split</text>
+
+        <rect x="24" y="244" width="832" height="36" rx="8" fill="#16305C"/>
+        <text class="bXaM" x="40" y="267">METADATA   100% of traffic   durations, counts, ids, scores, status, model fields</text>
+
+        <rect x="24" y="290" width="190" height="36" rx="8" fill="#0891A6"/>
+        <text class="bXaM" x="40" y="313">CONTENT   a sample</text>
+        <text class="bXaX" x="228" y="313">consented, short TTL, separate store, tighter access, audit log on reads</text>
+
+        <text class="bXaX" x="24" y="348">The cost of the default, stated honestly: with content off you can localise a failure to a</text>
+        <text class="bXaX" x="24" y="366">step, and you often still cannot explain why the model did what it did.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - the two positions, and the split that holds both</figcaption>
+    </figure>
+
+    <details class="card" open>
+      <summary><span class="mode live">Live</span>What the metadata-only default actually costs you<span class="mini">4 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>Most writing on this topic sells the privacy-preserving default as free. It is not free, and pretending otherwise is how you lose the argument with the engineer who has to debug at 03:00. Be precise about what you keep and what you give up.</p>
+        <table class="clean">
+          <tr><th></th><th>Metadata only, the default</th><th>With sampled content</th></tr>
+          <tr><td><strong>Where did it fail?</strong></td><td>Answerable. Spans, durations, statuses and counts localise the failing step exactly</td><td>Answerable, identically</td></tr>
+          <tr><td><strong>Was retrieval empty?</strong></td><td>Answerable. Document count, ids and scores are metadata</td><td>Answerable, plus you can read what came back</td></tr>
+          <tr><td><strong>Did it loop or truncate?</strong></td><td>Answerable. Step counts, finish reasons, token counts</td><td>Answerable, identically</td></tr>
+          <tr><td><strong>Why did the model do that?</strong></td><td><strong>Frequently not answerable.</strong> This is the real cost and it is the expensive half of debugging</td><td>Answerable on the sampled fraction, which is usually enough</td></tr>
+          <tr><td><strong>Legal exposure</strong></td><td>Low. Nothing personal left your boundary</td><td>Real, bounded, and manageable if it is consented, scoped and time-boxed</td></tr>
+        </table>
+        <p>Which is why the course's simulator ends the way it does. Switching on full content capture as the final lever moves retention from 4.6 GB to 48.1 GB, a 10.5x increase, flips the PII flag to true, and <strong>leaves the diagnosis score unchanged at 5 of 5</strong>, because the message content was never what was broken. Note the honest boundary of that lesson: it holds for this incident, which was a swallowed timeout and a stale cache. For a prompt-injection incident or a subtle instruction-following regression, content is the diagnosis. That is the case the sample exists to serve.</p>
+      </div>
+    </details>
+  </section>
+
+  <!-- ============ PART 2 ============ -->
+  <section class="section" id="spec">
+    <div class="section-kicker">
+      <span class="klabel">Part 2 · what the spec says</span>
+      <h2>Six sensitive attributes, three patterns, and one inverted default <span class="tag concept">7 min live</span></h2>
+    </div>
+    <p class="lede">The specification has already made most of these decisions for you, and it made them in the safe direction. The verbatim default: <strong>"OpenTelemetry instrumentations SHOULD NOT capture them by default, but SHOULD provide an option for users to opt in."</strong> Everything below is the shape of that opt-in.</p>
+
+    <p>Content lives in three <strong>Opt-In</strong> attributes, and three more are flagged sensitive. All six matter, and the second group is the one teams forget:</p>
+
+    <table class="clean">
+      <tr><th>Attribute</th><th>Status</th><th>What is actually in it</th></tr>
+      <tr><td><code>gen_ai.input.messages</code></td><td><strong>Opt-In</strong></td><td>The user's words. Structured, with a mandatory JSON schema</td></tr>
+      <tr><td><code>gen_ai.output.messages</code></td><td><strong>Opt-In</strong></td><td>The model's words, including anything it repeated back from the input</td></tr>
+      <tr><td><code>gen_ai.system_instructions</code></td><td><strong>Opt-In</strong></td><td>Your prompt engineering. Rarely personal data, frequently a trade secret</td></tr>
+      <tr><td><code>gen_ai.retrieval.query.text</code></td><td>Sensitive</td><td>What was searched for, which is often more revealing than the answer</td></tr>
+      <tr><td><code>gen_ai.tool.call.arguments</code></td><td><strong>Opt-In</strong></td><td><strong>The account number.</strong> The email address. The date of birth you passed to a lookup</td></tr>
+      <tr><td><code>gen_ai.tool.call.result</code></td><td><strong>Opt-In</strong></td><td>The row that came back out of your own database</td></tr>
+    </table>
+
+    <div class="callout warn">
+      <strong>Redacting only the prompt is insufficient, and this is the most common mistake on this page</strong>
+      A team switches off <code>gen_ai.input.messages</code>, declares the trace store clean, and passes review. Meanwhile <code>gen_ai.tool.call.arguments</code> is still on, because it is the field that makes tool debugging possible, and <strong>the tool arguments are frequently where the account number is</strong>. The user asked a vague question in natural language; your agent turned it into <code>lookup_customer(nric="S1234567A")</code>. The structured, machine-readable, easily-indexed version of the personal data is on the tool span, not on the prompt.
+    </div>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 382" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="The specification's three content usage patterns in its own order: do not record by default, record on spans for pre-production, and store externally with references on spans as recommended for production.">
+        <style>
+          .bXbH { font: 700 13px Inter, sans-serif; fill: #1B2230; }
+          .bXbT { font: 700 12.5px Inter, sans-serif; fill: #FFFFFF; }
+          .bXbS { font: 400 11px Inter, sans-serif; fill: #AFC0E4; }
+          .bXbC { font: 400 11px Inter, sans-serif; fill: #E4F6F9; }
+          .bXbX { font: 400 11px Inter, sans-serif; fill: #66707E; }
+          .bXbK { font: 600 12.5px Inter, sans-serif; fill: #08323A; }
+        </style>
+
+        <text class="bXbH" x="24" y="32">The spec's three patterns, in the spec's own order</text>
+
+        <rect x="24" y="52" width="214" height="80" rx="9" fill="#0C1F3F"/>
+        <text class="bXbT" x="40" y="78">1 · Do not record</text>
+        <text class="bXbS" x="40" y="96">the default</text>
+        <rect x="248" y="52" width="608" height="80" rx="9" fill="#EDF2FB" stroke="#AFC0E4" stroke-width="1.5"/>
+        <text class="bXbX" x="266" y="76">Do not capture instructions, inputs or outputs at all. This is what the spec means</text>
+        <text class="bXbX" x="266" y="94">by "SHOULD NOT capture them by default, but SHOULD provide an option for users</text>
+        <text class="bXbX" x="266" y="112">to opt in." You still keep every duration, count, id, score and status.</text>
+
+        <rect x="24" y="140" width="214" height="80" rx="9" fill="#16305C"/>
+        <text class="bXbT" x="40" y="166">2 · Record on the spans</text>
+        <text class="bXbS" x="40" y="184">pre-production</text>
+        <rect x="248" y="140" width="608" height="80" rx="9" fill="#EDF2FB" stroke="#AFC0E4" stroke-width="1.5"/>
+        <text class="bXbX" x="266" y="164">Content rides on the span itself. The spec: "best suited for... pre-production</text>
+        <text class="bXbX" x="266" y="182">environments" where telemetry volume is manageable and either privacy rules do</text>
+        <text class="bXbX" x="266" y="200">not apply or the telemetry storage complies with them.</text>
+
+        <rect x="24" y="228" width="214" height="80" rx="9" fill="#0891A6"/>
+        <text class="bXbT" x="40" y="254">3 · Store externally</text>
+        <text class="bXbC" x="40" y="272">for production</text>
+        <rect x="248" y="228" width="608" height="80" rx="9" fill="#E4F6F9" stroke="#0891A6" stroke-width="1.5"/>
+        <text class="bXbX" x="266" y="252">References on the span, content in a separate store. The spec calls this pattern</text>
+        <text class="bXbX" x="266" y="270">"recommended in production environments". The upload hook runs regardless of</text>
+        <text class="bXbX" x="266" y="288">the sampling decision, and the reference URI format is still literally TODO.</text>
+
+        <rect x="24" y="322" width="832" height="42" rx="10" fill="#FFFFFF" stroke="#C7CFDA" stroke-width="1.5"/>
+        <rect x="42" y="335" width="14" height="14" rx="3" fill="#0891A6"/>
+        <text class="bXbK" x="66" y="347">The spec mandates a gate on content. It does not mandate the name of the gate.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - three patterns, and which one the spec recommends for production</figcaption>
+    </figure>
+
+    <details class="card">
+      <summary><span class="mode self">Self-study</span>The env-var nuance, precisely<span class="mini">2 min read</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p><code>OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT</code> is the de-facto name of the opt-in switch, and you will find it in most instrumentation libraries. Be careful how you say that in a design review, because <strong>the spec mentions it only as "for example"</strong>. What is mandated is that an opt-in gate exists and defaults to off. The name is a convention that libraries happen to share.</p>
+        <p>The practical consequence: never assume a library is safe because you did not set that variable. Two failure modes follow directly.</p>
+        <ul>
+          <li>An instrumentation may honour a differently named flag, or a constructor argument, or a config file key. Grep for what the library reads rather than trusting the name.</li>
+          <li>Handling of <strong>streaming chunks</strong> is a bare <code>TODO</code> in the spec, so the behaviour of a streaming instrumentation with content capture is not specified. Test it rather than reasoning about it.</li>
+        </ul>
+        <p>Verification is one span, not one document: run one real call through your pipeline in a staging environment and read the raw exported span. If prompt text, tool arguments or retrieval query text appear in it, your gate is not where you think it is.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode self">Self-study</span>The inverted default: OpenInference captures content unless you stop it<span class="mini">3 min read</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>This is the single most consequential difference between the two dialects, and it is a privacy posture rather than a technical one. Both emit valid OTLP; every OpenInference trace is a valid OTLP trace. But:</p>
+        <ul>
+          <li><strong>OTel GenAI:</strong> content capture is Opt-In and <strong>off</strong> by default. You must act to expose data.</li>
+          <li><strong>OpenInference:</strong> content is captured <strong>on</strong> by default. You hide it with the <code>OPENINFERENCE_HIDE_*</code> flag family, and <strong>every one of those flags defaults to False</strong>. You must act to protect data.</li>
+        </ul>
+        <p>Two details worth knowing because they show up in review. OpenInference redaction replaces the value with the literal string <code>"__REDACTED__"</code>, which is genuinely useful: the field's presence is preserved, so you can still see that there was a prompt and that it was hidden, rather than wondering whether instrumentation was broken. And <code>OPENINFERENCE_BLOB_UPLOADER</code> offloads oversized media, which is the same idea as the OTel upload hook except that it is implemented rather than being a TODO.</p>
+        <p>The lesson generalises past these two libraries: <strong>read the default of every instrumentation you install, and assume nothing from the family it belongs to</strong>. If you migrate a dialect, or add one framework instrumented by a different project, your privacy posture can invert with no change to your own code.</p>
+      </div>
+    </details>
+  </section>
+
+  <!-- ============ PART 3 ============ -->
+  <section class="section" id="pipeline">
+    <div class="section-kicker">
+      <span class="klabel">Part 3 · the pipeline</span>
+      <h2>Scrub before ingestion, not after <span class="tag concept">6 min live</span></h2>
+    </div>
+    <p class="lede">Where you redact matters more than how well you redact. Once content reaches a vendor endpoint you have made a cross-border transfer and created a processor relationship, and deletion becomes a request rather than a fact. Everything downstream of that line is somebody else's promise. So the whole design question is: how much can you strip while keeping the trace useful, and can you do it before the exporter.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 386" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="A pipeline from your application through in-process redaction layers and a collector to a vendor store, with a boundary line, and five redaction layers listed: deny by default, allow-list rather than deny-list, structural redaction, pseudonymous keys, and sampled consented content.">
+        <style>
+          .bXcH { font: 700 13px Inter, sans-serif; fill: #1B2230; }
+          .bXcB { font: 700 12px Inter, sans-serif; fill: #FFFFFF; }
+          .bXcX { font: 400 11px Inter, sans-serif; fill: #66707E; }
+          .bXcT { font: 600 12.5px Inter, sans-serif; fill: #16305C; }
+          .bXcK { font: 600 12.5px Inter, sans-serif; fill: #08323A; }
+        </style>
+
+        <text class="bXcH" x="24" y="28">Scrub before ingestion. After ingestion it is a request, not a fact.</text>
+
+        <rect x="24" y="44" width="150" height="44" rx="8" fill="#0C1F3F"/>
+        <text class="bXcB" x="40" y="72">your app</text>
+        <path d="M180 66 l10 0 m-4 -4 l4 4 l-4 4" stroke="#66707E" stroke-width="1.5" fill="none"/>
+        <rect x="190" y="44" width="300" height="44" rx="8" fill="#16305C"/>
+        <text class="bXcB" x="206" y="72">redaction layers, in process</text>
+        <path d="M496 66 l10 0 m-4 -4 l4 4 l-4 4" stroke="#66707E" stroke-width="1.5" fill="none"/>
+        <rect x="506" y="44" width="150" height="44" rx="8" fill="#3F62A8"/>
+        <text class="bXcB" x="522" y="72">collector</text>
+        <path d="M676 38 L676 96" stroke="#991B1B" stroke-width="2" stroke-dasharray="5 4" fill="none"/>
+        <rect x="690" y="44" width="166" height="44" rx="8" fill="#0891A6"/>
+        <text class="bXcB" x="706" y="72">vendor store</text>
+
+        <text class="bXcX" x="24" y="112">Left of the dashed line is yours. Right of it is a processor relationship and a transfer.</text>
+
+        <rect x="24" y="126" width="280" height="34" rx="7" fill="#EDF2FB" stroke="#AFC0E4" stroke-width="1.5"/>
+        <text class="bXcT" x="40" y="148">1 · Deny by default</text>
+        <rect x="312" y="126" width="544" height="34" rx="7" fill="#FFFFFF" stroke="#C7CFDA" stroke-width="1.5"/>
+        <text class="bXcX" x="328" y="148">Nothing sensitive is captured unless a rule names it explicitly.</text>
+
+        <rect x="24" y="164" width="280" height="34" rx="7" fill="#EDF2FB" stroke="#AFC0E4" stroke-width="1.5"/>
+        <text class="bXcT" x="40" y="186">2 · Allow-list, never deny-list</text>
+        <rect x="312" y="164" width="544" height="34" rx="7" fill="#FFFFFF" stroke="#C7CFDA" stroke-width="1.5"/>
+        <text class="bXcX" x="328" y="186">A deny-list fails on the case you did not imagine. That is most cases.</text>
+
+        <rect x="24" y="202" width="280" height="34" rx="7" fill="#EDF2FB" stroke="#AFC0E4" stroke-width="1.5"/>
+        <text class="bXcT" x="40" y="224">3 · Structural redaction</text>
+        <rect x="312" y="202" width="544" height="34" rx="7" fill="#FFFFFF" stroke="#C7CFDA" stroke-width="1.5"/>
+        <text class="bXcX" x="328" y="224">Keep lengths, token counts, schema validity, doc ids and scores.</text>
+
+        <rect x="24" y="240" width="280" height="34" rx="7" fill="#EDF2FB" stroke="#AFC0E4" stroke-width="1.5"/>
+        <text class="bXcT" x="40" y="262">4 · Pseudonymous keys</text>
+        <rect x="312" y="240" width="544" height="34" rx="7" fill="#FFFFFF" stroke="#C7CFDA" stroke-width="1.5"/>
+        <text class="bXcX" x="328" y="262">A stable hash you can join on and cannot read back to a person.</text>
+
+        <rect x="24" y="278" width="280" height="34" rx="7" fill="#E4F6F9" stroke="#0891A6" stroke-width="1.5"/>
+        <text class="bXcT" x="40" y="300" fill="#08323A">5 · Sampled consented content</text>
+        <rect x="312" y="278" width="544" height="34" rx="7" fill="#FFFFFF" stroke="#C7CFDA" stroke-width="1.5"/>
+        <text class="bXcX" x="328" y="300">Separate store, tighter access control, short TTL, audit log on reads.</text>
+
+        <rect x="24" y="326" width="832" height="42" rx="10" fill="#FFFFFF" stroke="#C7CFDA" stroke-width="1.5"/>
+        <rect x="42" y="339" width="14" height="14" rx="3" fill="#0891A6"/>
+        <text class="bXcK" x="66" y="351">Most diagnostic power survives redaction, because most of it was metadata anyway.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - five layers, and the line after which deletion stops being yours</figcaption>
+    </figure>
+
+    <div class="callout tip">
+      <strong>Why allow-list beats deny-list, in one sentence you can use in a review</strong>
+      A deny-list of PII patterns is a bet that you enumerated every shape personal data can take in free text written by strangers. You did not. Regular expressions catch the credit card and miss "my wife Sarah at the Tampines branch, the one who called on Tuesday". An allow-list inverts the failure mode: when you meet a field you did not anticipate, the safe thing happens by default and you lose a little diagnostic detail instead of leaking a person.
+    </div>
+  </section>
+
+  <!-- ============ RETENTION AND LAW ============ -->
+  <section class="section" id="law">
+    <div class="section-kicker">
+      <span class="klabel">Retention and the law</span>
+      <h2>Real numbers, and three principles that bite a trace store <span class="tag concept">8 min live</span></h2>
+    </div>
+    <p class="lede">Retention policy is usually written as a document and then quietly overridden by a technical detail nobody surfaced. Below are the published numbers from one provider, and then the three data-protection principles that apply to your trace store whether or not anyone has told your team they do.</p>
+
+    <table class="clean">
+      <tr><th>Surface</th><th>What the vendor documents <strong>[P]</strong></th><th>What it means for your design</th></tr>
+      <tr><td><strong>Conversation content</strong></td><td>Prompts and outputs are <strong>not retained by default</strong></td><td>The provider's default is already the good one. Your own trace store is usually the leak, not theirs</td></tr>
+      <tr><td><strong>Zero Data Retention</strong></td><td>Exists per organisation, but <strong>does not cover</strong> code execution, Claude for Excel, or Teams and Enterprise interfaces</td><td>ZDR is not a property of your account, it is a property of a path. Enumerate your paths</td></tr>
+      <tr><td><strong>CORS under ZDR</strong></td><td><strong>Unsupported</strong></td><td>A browser app must go through a backend proxy. This is an architecture decision disguised as a retention setting</td></tr>
+      <tr><td><strong>Covered Models</strong></td><td>Claude Fable 5 and Mythos 5 require <strong>30-day retention</strong>, are ZDR-ineligible, and a ZDR org calling them receives <code>400 invalid_request_error</code></td><td><strong>Your retention policy can be set by your model choice, not by your policy document.</strong> A model swap is a compliance change</td></tr>
+      <tr><td><strong>Compliance surfaces</strong></td><td>Activity Feed and remote session transcripts run to <strong>6 years</strong></td><td>Ask which of your surfaces are compliance surfaces before you promise anyone a 30-day deletion window</td></tr>
+    </table>
+
+    <div class="callout warn">
+      <strong>The sentence to take to your next architecture review</strong>
+      Your retention policy can be set by your model choice rather than by your policy document. A team with a written 7-day retention rule, a ZDR agreement and a signed DPIA can breach all three by merging a one-line config change that switches to a Covered Model. The only defence is a test: assert in CI that the model ids in production configuration are on your approved list, and fail the build otherwise.
+    </div>
+
+    <table class="clean">
+      <tr><th>GDPR Art. 5(1) <strong>[P]</strong></th><th>How it applies to a trace store</th></tr>
+      <tr><td><strong>(c) Data minimisation</strong></td><td>Capturing full prompt text on 100% of traffic "in case we need to debug" is the textbook violation. <strong>So sampling and redaction are the compliance mechanism, not merely a cost mechanism.</strong> That reframing is what gets the work funded</td></tr>
+      <tr><td><strong>(e) Storage limitation</strong></td><td>An unbounded trace-retention default is non-compliant by construction. "We keep traces until the disk fills" is a policy, and it is the wrong one. Set a TTL per span category, with content on the shortest</td></tr>
+      <tr><td><strong>(f) Integrity and confidentiality</strong></td><td>Traces hold prompts, tool arguments and retrieved documents <strong>in one place</strong>, usually in third-party SaaS, usually with broad internal read access. <strong>Trace stores deserve the access controls you give production databases, and most do not have them</strong></td></tr>
+      <tr><td><strong>Erasure requests</strong></td><td>They must reach the trace store. If you cannot delete one user's spans, you cannot comply. Which is why pseudonymous keys are an engineering requirement and not a nicety: you need a join key to find the rows</td></tr>
+    </table>
+
+    <div class="callout warn">
+      <strong>The PDPA trap, stated clearly</strong>
+      Singapore's PDPC published <em>Advisory Guidelines on the Use of Personal Data in AI Recommendation and Decision Systems</em> on 1 March 2024. Two facts about them matter here. They are <strong>not legally binding</strong>, and per multiple independent law-firm summaries <strong>[S]</strong> they <strong>do not cover generative AI</strong>. So <strong>do not cite them as authority for LLM prompt-trace retention</strong>, which is a mistake that appears in a lot of internal decks. For an LLM application in Singapore the operative obligations are the PDPA's own: <strong>Consent, Purpose Limitation, Notification, Protection and Retention Limitation</strong>. Retention Limitation is the one that governs your trace store directly. Honest flag: the "excludes generative AI" scope statement is <strong>secondary [S]</strong> and should be re-verified against the PDF before you rely on it in writing.
+    </div>
+  </section>
+
+  <!-- ============ DEMO 1 ============ -->
+  <section class="section" id="demo-1">
+    <div class="section-kicker">
+      <span class="klabel">Demo 1 of 2</span>
+      <h2>Build the redaction layer for Beacon, before the exporter <span class="tag demo">★ 10 min · everyone builds</span></h2>
+    </div>
+    <p class="lede">Beacon's Insight Bot answers executive questions about revenue, which means its tool arguments contain customer ids and its retrieved documents contain unreleased financials. Build the layer that lets the trace stay useful and stops any of that leaving the process.</p>
+
+    <div class="steps">
+      <div class="step"><p>Write the allow-list first, as data rather than as code. The starting set is the low-cardinality metadata: provider, model, operation, token counts, finish reasons, document counts and scores, plus your own <code>tenant.id</code> and <code>feature.id</code>. Everything not on the list is redacted. Review the list in a pull request like any other security artifact.</p></div>
+      <div class="step"><p>Redact structurally, not destructively. For every field you drop, keep its shape: length, token count, whether it parsed as valid JSON, and the ids and scores of anything retrieved. This is what keeps the trace diagnostic, and it is the part people skip because dropping the field is one line shorter.</p></div>
+      <div class="step"><p>Hash the identifiers with a keyed hash and a rotation plan, so you can still group by user and still cannot read the user. Note the tension you have just created and write it down: rotating the key breaks your ability to join across the rotation boundary, which is a cost worth paying and a surprise worth documenting.</p></div>
+      <div class="step"><p>Put it in the right place. A <code>ReadableSpan</code> is immutable by the time <code>on_end</code> is called, so a span processor cannot rewrite attributes: in production this belongs in an <strong>exporter wrapper</strong> or in the collector's own redaction and transform processors. The sketch below is deliberately the readable version rather than the correct one, and if you ship it you will get a very quiet no-op.</p></div>
+      <div class="step"><p>Verify with a real export. Send one live request through staging and read the raw exported payload. Grep it for a known test value that you planted in the prompt and in a tool argument. A redaction layer that has not been verified against a raw export is a belief, not a control.</p></div>
+    </div>
+
+    <div class="prompt-box good">
+<span class="label">★ Redaction sketch · allow-list, structural, keyed hash</span>
+ALLOW = {"gen_ai.provider.name", "gen_ai.operation.name", "gen_ai.request.model",
+         "gen_ai.response.model", "gen_ai.usage.input_tokens",
+         "gen_ai.usage.output_tokens", "gen_ai.response.finish_reasons",
+         "gen_ai.retrieval.documents.count", "tenant.id", "feature.id"}
+HASH  = {"user.id", "gen_ai.conversation.id"}
+
+def scrub(attrs: dict) -&gt; dict:
+    out = {}
+    for k, v in attrs.items():
+        if k in ALLOW:                 out[k] = v
+        elif k in HASH:                out[k] = hmac_hash(v)          # joinable, unreadable
+        elif isinstance(v, str):
+            out[k + ".len"]        = len(v)                            # keep the shape
+            out[k + ".json_valid"] = is_json(v)
+            out[k]                 = "__REDACTED__"                    # keep the field
+    return out
+
+# NOTE: a ReadableSpan is immutable in on_end. In production this runs in an
+# exporter wrapper, or in the collector's redaction / transform processor.
+    </div>
+
+    <div class="callout tip">
+      <strong>Keep the field, not just the value</strong>
+      Writing the literal <code>"__REDACTED__"</code> rather than deleting the key is the pattern OpenInference chose and it is worth copying. A missing attribute is ambiguous: it could mean redacted, or it could mean your instrumentation silently stopped emitting last Thursday. A present attribute with a redaction marker tells you the pipeline is alive and the policy is working, which is the difference between a control and a hope.
+    </div>
+  </section>
+
+  <!-- ============ DEMO 2 ============ -->
+  <section class="section" id="demo-2">
+    <div class="section-kicker">
+      <span class="klabel">Demo 2 of 2</span>
+      <h2>The erasure drill: delete one Beacon user from your traces <span class="tag demo">★ 10 min · everyone builds</span></h2>
+    </div>
+    <p class="lede">This is a fire drill, and almost every team fails it the first time. One named Beacon user asks for their data to be erased. You have 30 days. Do it, with a clock running, and write down every place you had to look.</p>
+
+    <div class="steps">
+      <div class="step"><p>Find the rows. Given only a user identifier, list every span, event, metric and content blob attributable to that person. If your answer requires a full table scan of a SaaS trace store you may not be able to query that way, you have just discovered that your join key was missing rather than pseudonymous.</p></div>
+      <div class="step"><p>Follow the content out to the separate store. Pattern three keeps content externally with references on the spans, and <strong>the upload hook runs regardless of the sampling decision</strong>, which means content can exist for traces you never sampled. Deleting spans does not delete blobs.</p></div>
+      <div class="step"><p>Check whether you can actually delete. Some vendors offer trace deletion by id, some only by project or by TTL, and some only on request. Whatever you find, write the answer into your DPIA: "deletion is a support ticket with an unstated SLA" is a finding, and it is one your DPO needs before the request arrives, not after.</p></div>
+      <div class="step"><p>Now set the TTLs so most of this problem expires on its own. Metadata can live long because it is not personal. Content gets the shortest life you can defend, in a separate store, so that the majority of erasure requests are satisfied by a clock rather than by an engineer at a keyboard.</p></div>
+      <div class="step"><p>Finally, write the one-page policy: what is captured, at what rate, with whose consent, where it lives, who may read it, how long it survives, and how it is deleted. One page. Reviewed on a date. That document is the deliverable of this session, more than any code you wrote today.</p></div>
+    </div>
+
+    <div class="callout warn">
+      <strong>The finding almost everyone gets</strong>
+      Content lives in more places than the design diagram shows: the trace store, the blob store the upload hook wrote to, the eval dataset somebody exported to debug a regression, a CSV in a shared drive from an incident in March, and a Slack thread where an engineer pasted a failing prompt. Erasure has to reach all of them. The engineering lesson is not "be more careful with the CSV", it is <strong>capture less in the first place</strong>, because every copy you never made is a copy you never have to find.
+    </div>
+  </section>
+
+  <!-- ============ HOMEWORK ============ -->
+  <section class="section" id="exercise">
+    <div class="section-kicker">
+      <span class="klabel">Homework</span>
+      <h2>Try it yourself - this week <span class="tag exercise">◐ 55-70 min total</span></h2>
+    </div>
+    <ul>
+      <li>Export one raw span from your production pipeline and read every attribute. Specifically look at <code>gen_ai.tool.call.arguments</code> and <code>gen_ai.retrieval.query.text</code>, not just the prompt. Most teams find personal data in a field they had never thought about.</li>
+      <li>For every instrumentation library you have installed, look up its content-capture default in the source rather than the README. If any of them captures by default, you have a live exposure and a one-line fix.</li>
+      <li>Run the erasure drill for one real user id and time it. Write the elapsed time and the list of places you had to look into your DPIA. That artifact is worth more to your DPO than any policy paragraph.</li>
+      <li>Check whether any model id in production configuration is on a retention-mandated Covered Model list, and add a CI assertion that fails the build if an unapproved model id appears in config.</li>
+      <li>Set an explicit TTL on every trace category you store, with content on the shortest. If any category currently has no TTL, that is an unbounded retention default, which Art. 5(1)(e) makes non-compliant by construction.</li>
+      <li>Write the one-page policy from Demo 2 and put a review date on it. Then diary the review. An alerting and retention policy nobody re-reads decays into exactly the configuration you had before you wrote it.</li>
+    </ul>
+  </section>
+
+  <!-- ============ SOURCES ============ -->
+  <section class="section" id="official">
+    <div class="section-kicker">
+      <span class="klabel">Source material</span>
+      <h2>Official sources covered</h2>
+    </div>
+    <p class="lede">This is the legally-sensitive page of the course, so the labelling is strict. <strong>[P]</strong> is primary, <strong>[S]</strong> is secondary, and anything derived is named as a derivation. None of it is legal advice.</p>
+    <div class="covered">
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">[P] The vendor pair: privacy controls "prevent engineers from examining the problematic interactions needed to identify or reproduce bugs", and monitoring patterns "all without monitoring the contents of individual conversations"</span><span class="note">Part 1 · the tension and the split, both quoted</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">[P] The three Opt-In content attributes plus the sensitive-flagged <code>gen_ai.retrieval.query.text</code>, <code>gen_ai.tool.call.arguments</code> and <code>gen_ai.tool.call.result</code></span><span class="note">Part 2 · and why redacting the prompt alone is insufficient</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">[P] Spec default, verbatim: "OpenTelemetry instrumentations SHOULD NOT capture them by default, but SHOULD provide an option for users to opt in."</span><span class="note">Part 2 · quoted, not paraphrased</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">[P] The three usage patterns in the spec's own order, with "pre-production environments" and "recommended in production environments", the upload hook running regardless of the sampling decision, and the reference URI still literally TODO</span><span class="note">Part 2 diagram · and Demo 2 step 2</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">[P] <code>OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT</code> appears in the spec only as "for example". The spec mandates the gate, not the name. Streaming chunk handling is a bare TODO</span><span class="note">Part 2 self-study · verify with a raw export</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">[P] OpenInference's inverted default: content captured by default, hidden via <code>OPENINFERENCE_HIDE_*</code> flags all defaulting False, redaction writing the literal <code>"__REDACTED__"</code></span><span class="note">Part 2 self-study · and the pattern copied in Demo 1</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">[P] Retention: content "not retained by default"; ZDR scope exclusions and unsupported CORS; Covered Models requiring 30-day retention and returning <code>400 invalid_request_error</code> to a ZDR org; compliance surfaces at 6 years</span><span class="note">Retention section · read live 2026-08-13, re-verify per cohort</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">[P] GDPR Art. 5(1)(c) data minimisation, (e) storage limitation, (f) integrity and confidentiality</span><span class="note">Retention section · the trace store is in scope whether or not anyone said so</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">[P] PDPC <em>Advisory Guidelines on the Use of Personal Data in AI Recommendation and Decision Systems</em>, 1 Mar 2024, are not legally binding</span><span class="note">PDPA callout · and the operative PDPA obligations named instead</span></div>
+      <div class="covered-row"><span class="status pill light">◐</span><span class="name">[S] That those PDPC guidelines do not cover generative AI</span><span class="note"><strong>Secondary only</strong> - multiple independent law-firm summaries. <strong>Re-verify against the PDF</strong> before relying on it in writing</span></div>
+      <div class="covered-row"><span class="status pill light">◐</span><span class="name">The 4.6 GB to 48.1 GB retention figure and the 10.5x multiplier</span><span class="note">Modelled in the course simulator (4KB base, 38KB content, $0.28/GB-month) and labelled as modelled. Substitute real prices</span></div>
+      <div class="covered-row"><span class="status pill bare">·</span><span class="name">Beacon, its executives and its customer ids</span><span class="note">Constructed case throughout. Not a real company and not a real data-protection incident</span></div>
+    </div>
+  </section>
+
+  <!-- ============ QUIZ ============ -->
+  <section class="section" id="quiz">
+    <div class="section-kicker">
+      <span class="klabel">Check yourself</span>
+      <h2>Three questions before you go 🎯 <span class="tag exercise">◐ 90 seconds</span></h2>
+    </div>
+    <div class="quiz-q" data-answer="2">
+      <p class="qtext">1 · A team switches off prompt and completion capture, declares the trace store free of personal data, and passes security review. What did they miss?</p>
+      <button class="qopt" type="button">A · Nothing, if the instrumentation honours the capture flag correctly</button>
+      <button class="qopt" type="button">B · Only the system instructions, which are a trade secret rather than personal data</button>
+      <button class="qopt" type="button">C · The tool spans. <code>gen_ai.tool.call.arguments</code> and <code>gen_ai.tool.call.result</code> are frequently where the account number is, in a structured and easily indexed form</button>
+      <p class="qwhy">The user asked something vague in natural language; your agent turned it into a typed call with an identifier in it, and then a result row came back out of your own database. Both of those are Opt-In and sensitive in the spec, and both are usually left on because they are what makes tool debugging possible. Add the retrieval query text as a third: what someone searched for is often more revealing than the answer they got.</p>
+    </div>
+    <div class="quiz-q" data-answer="0">
+      <p class="qtext">2 · Your organisation has a Zero Data Retention agreement and a written 7-day retention policy. An engineer merges a config change to a Covered Model. What happens?</p>
+      <button class="qopt" type="button">A · Retention is now governed by the model, not by your document: Covered Models require 30-day retention and are ZDR-ineligible, so a ZDR org gets <code>400 invalid_request_error</code> and a non-ZDR org silently gets 30-day retention</button>
+      <button class="qopt" type="button">B · Nothing changes, because ZDR is an account-level setting that overrides model defaults</button>
+      <button class="qopt" type="button">C · The request succeeds and content is retained for 7 days, matching your policy</button>
+      <p class="qwhy">This is the teaching point worth repeating out loud: your retention policy can be set by your model choice rather than by your policy document. Claude Fable 5 and Mythos 5 are documented as Covered Models requiring 30-day retention and are ZDR-ineligible. The defence is mechanical rather than procedural: assert in CI that every model id in production configuration is on your approved list, and fail the build otherwise. And note the sibling trap, that CORS is unsupported under ZDR, so a browser app must route through a backend proxy.</p>
+    </div>
+    <div class="quiz-q" data-answer="1">
+      <p class="qtext">3 · You add one framework instrumented by OpenInference alongside your OTel GenAI stack, changing nothing else. What happens to your privacy posture?</p>
+      <button class="qopt" type="button">A · Nothing. Both emit valid OTLP, so both follow the same content defaults</button>
+      <button class="qopt" type="button">B · It inverts for that framework. OpenInference captures content by default and you must set <code>OPENINFERENCE_HIDE_*</code> flags to stop it, since every one of them defaults to False</button>
+      <button class="qopt" type="button">C · Content capture is disabled entirely, because conflicting defaults resolve to the safest option</button>
+      <p class="qwhy">Every OpenInference trace is a valid OTLP trace, and the dialects are genuinely interoperable, which is exactly what makes this trap easy to walk into. The defaults are opposite: OTel GenAI is opt-in and off, OpenInference is on and you opt out. So one added dependency can start shipping prompts to your trace store with no change to your own code. Generalise it into a habit: read the content-capture default of every instrumentation you install, in the source, and verify with one raw export.</p>
+    </div>
+    <p class="quiz-score"></p>
+  </section>
+
+  <!-- ============ CLOSE ============ -->
+  <section class="section" id="close">
+    <div class="section-kicker">
+      <span class="klabel">Closing the course</span>
+      <h2>Ten sessions, and what you now have</h2>
+    </div>
+    <p class="lede">You started with a green dashboard held through a full day of executives receiving stale numbers, and you finish able to build the system that would have caught it in twenty minutes. Here is the whole builder track in ten lines, which is also a decent checklist to audit any AI system against.</p>
+    <ul>
+      <li><strong>b1 · Spans and traces.</strong> Six words, the parented tree, and unaccounted time as the number that localises everything else.</li>
+      <li><strong>b2 · OTel GenAI conventions.</strong> The current attribute keys with their requirement levels, and the deprecations that date most blog posts.</li>
+      <li><strong>b3 · Instrumenting an agent.</strong> The nesting rules, the plan-owns-its-LLM-call exception, and where the auto-instrumentation stops.</li>
+      <li><strong>b4 · Cost and latency per span.</strong> Token attribution that survives a loop, the double-counting trap, and TTFT as its own quantity.</li>
+      <li><strong>b5 · Reading a broken trace.</strong> Coverage rung by rung, up to five of five diagnoses, and the content lever that adds nothing.</li>
+      <li><strong>b6 · The failure taxonomy.</strong> Failure mode to telemetry signal to fix, and the swallowed exception that starts it all.</li>
+      <li><strong>b7 · Sampling and its own cost.</strong> Head versus tail, the <code>decision_wait</code> trap, and cardinality as the reason ids stay off metrics.</li>
+      <li><strong>b8 · Alerting and SLOs.</strong> Burn rate over thresholds, both windows, and an inventory that says page, ticket or neither.</li>
+      <li><strong>b9 · Drift and silent changes.</strong> Four drifts, the provider's three mechanisms, and the embedding version gate that refuses rather than degrades.</li>
+      <li><strong>b10 · Privacy and retention.</strong> Metadata at one hundred percent, content on a consented short-TTL sample, and a policy on one reviewed page.</li>
+    </ul>
+    <div class="callout win">
+      <strong>★ The conviction, in one sentence</strong>
+      Evals tell you whether it works, observability tells you what actually happened, and an un-instrumented step cannot fail as far as your trace is concerned.
+    </div>
+    <div class="callout tip">
+      <strong>What to do on Monday</strong>
+      Not all of it. Pick the two things with the worst ratio of effort to consequence: set span status in every <code>except</code> block on an AI path, and emit <code>gen_ai.response.model</code> next to <code>gen_ai.request.model</code>. Both are afternoon-sized. Then compute unaccounted time on one real request and take that single percentage to your next planning meeting, because a number beats an argument, and this is the number that funds everything else in the course.
+    </div>
+  </section>
+
+  <!-- ============ CHEAT SHEET ============ -->
+  <section class="cheat" id="cheatsheet">
+    <h3>Builder session 10 cheat sheet <span>· pin this</span></h3>
+    <div class="grid-2">
+      <div class="cheat-item"><b>The split, not the compromise</b><span>Metadata at 100%. Content on a small consented sample with a short TTL, in a separate store.</span></div>
+      <div class="cheat-item"><b>The cost of the default</b><span>With content off you can localise a failure to a step and often cannot explain why the model did it.</span></div>
+      <div class="cheat-item"><b>Six sensitive fields, not three</b><span>Input, output and system instructions, plus retrieval query text, tool call arguments and tool call result.</span></div>
+      <div class="cheat-item"><b>Tool arguments hold the account number</b><span>Redacting only the prompt is insufficient. The structured personal data is on the tool span.</span></div>
+      <div class="cheat-item"><b>Three patterns, in spec order</b><span>Do not record (default). Record on spans (pre-production). Store externally with references (production).</span></div>
+      <div class="cheat-item"><b>The gate, not the name</b><span><code>OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT</code> is de facto. The spec mandates only that a gate exists and is off.</span></div>
+      <div class="cheat-item"><b>Scrub before ingestion</b><span>Allow-list, not deny-list. Keep lengths, counts, doc ids and scores. Most diagnostic power is metadata.</span></div>
+      <div class="cheat-item"><b>Your model can set your policy</b><span>Covered Models force 30-day retention and are ZDR-ineligible. Assert approved model ids in CI.</span></div>
+    </div>
+  </section>
+
+  <footer class="pagefoot">
+    <span>Builder session 10 of 10 · learn-ai-observability-with-phoebe · by Phoebe Fu &nbsp;·&nbsp; 📚 <a href="https://phoebefu6.github.io/learn-with-phoebe/">Learn with Phoebe ↗</a></span>
+    <span><a href="b9-drift-and-silent-changes.html">← Previous: drift and silent changes</a> &nbsp;·&nbsp; <a href="../index.html">Back to course home →</a></span>
+  </footer>
+
+</main>
+
+<script src="../assets/app.js?v=2"></script>
+</body>
+</html>
