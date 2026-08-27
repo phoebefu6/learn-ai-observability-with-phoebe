@@ -89,8 +89,8 @@ body {
 .agenda span { padding: .45rem .3rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .agenda .a1 { background: var(--indigo-deep); }
 .agenda .a2 { background: var(--indigo-mid); }
-.agenda .a3 { background: var(--amber); color: var(--amber-ink); }
-.agenda .a4 { background: var(--indigo-soft); }
+.agenda .a3 { background: #077F92; color: #fff; }
+.agenda .a4 { background: var(--indigo-soft); color: var(--ink); }
 
 /* ---------- toolbar ---------- */
 .toolbar {
@@ -992,7 +992,8 @@ details.card.linked { border-color: var(--pv-flag); box-shadow: 0 0 0 3px var(--
   /* long inline code tokens and nowrap chips are the two things that still
      forced the page sideways below 640px: let them break rather than push
      the layout. Inside the media query only - desktop is untouched. */
-  :not(pre) > code, .prompt-box span, code span { overflow-wrap: anywhere; word-break: break-word; }
+  :not(pre) > code, .prompt-box span, code span,
+  p span, li span, td span { overflow-wrap: anywhere; word-break: break-word; }
   .chip, .syn-chip, .pill, .mode, .tag { white-space: normal; max-width: 100%; }
 
   /* the agenda bar truncated its own labels into nonsense - stack it */
