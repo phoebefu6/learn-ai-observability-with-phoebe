@@ -13,6 +13,7 @@
   --faint: #C7CFDA;
   --hairline: #E4E8EF;
   --amber: #0891A6;
+  --amber-solid: #078093;
   --amber-ink: #08323A;
   --amber-50: #E4F6F9;
   --paper: #F7F9FC;
@@ -224,7 +225,7 @@ details.card .body h4:first-child { margin-top: 0; }
 .pill.solid { background: var(--indigo); color: #fff; }
 .pill.light { background: var(--indigo-50); color: var(--indigo); }
 .pill.inkpill { background: var(--ink); color: #fff; }
-.pill.amber, .pill.peach { background: var(--amber); color: var(--amber-ink); }
+.pill.amber, .pill.peach { background: var(--amber-solid); color: #fff; }
 .pill.bare { color: var(--faint); }
 
 /* ---------- 4D grid ---------- */
@@ -282,7 +283,7 @@ table.clean td:first-child { font-weight: 600; }
   padding: .15rem .7rem;
 }
 .prompt-box.bad .label { background: var(--faint); color: var(--ink); }
-.prompt-box.good .label { background: var(--amber); color: var(--amber-ink); }
+.prompt-box.good .label { background: var(--amber-solid); color: #fff; }
 .copy-btn {
   position: absolute;
   top: .7rem;
@@ -299,7 +300,7 @@ table.clean td:first-child { font-weight: 600; }
   transition: background .15s ease;
 }
 .copy-btn:hover { background: rgba(255,255,255,.22); }
-.copy-btn.copied { background: var(--amber); border-color: var(--amber); color: var(--amber-ink); }
+.copy-btn.copied { background: var(--amber-solid); border-color: var(--amber-solid); color: #fff; }
 
 /* ---------- demo steps ---------- */
 .steps { counter-reset: step; margin: .6rem 0 1rem; }
@@ -351,8 +352,8 @@ table.clean td:first-child { font-weight: 600; }
 }
 .callout.example .ex-pill {
   display: inline-block;
-  background: var(--amber);
-  color: var(--amber-ink);
+  background: var(--amber-solid);
+  color: #fff;
   border-radius: 999px;
   padding: .15rem .7rem;
   font-size: .68rem;
@@ -694,7 +695,7 @@ details.card:hover::after { opacity: 1; }
   font-family: inherit; transition: all .14s ease; white-space: nowrap;
 }
 .sql-btn:hover { background: rgba(255,255,255,.2); }
-.sql-btn.sql-run { background: var(--amber); color: var(--amber-ink); border-color: var(--amber); }
+.sql-btn.sql-run { background: var(--amber-solid); color: #fff; border-color: var(--amber-solid); }
 .sql-btn.sql-run:hover { filter: brightness(1.05); }
 .sql-label {
   display: block;
