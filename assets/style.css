@@ -3,6 +3,7 @@
    (CSS var names still read --indigo/--amber; they hold midnight/cyan values.) */
 
 :root {
+  --muted-text: #646D7B;
   --indigo: #16305C;
   --indigo-deep: #0C1F3F;
   --indigo-mid: #3F62A8;
@@ -865,7 +866,7 @@ table.sql-table tr:last-child td { border-bottom: none; }
 .wl-brief p { font-size: .86rem; line-height: 1.65; color: var(--ink); }
 
 .wl-paper { margin: 16px; border: 1px solid var(--hairline); border-radius: 12px; overflow: hidden; box-shadow: 0 8px 24px rgba(34,37,43,.07); }
-.wl-chrome { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; padding: 9px 16px; background: var(--indigo-50); border-bottom: 1px solid var(--hairline); font: 700 .72rem/1.5 "Inter", sans-serif; color: var(--muted); letter-spacing: .02em; }
+.wl-chrome { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; padding: 9px 16px; background: var(--indigo-50); border-bottom: 1px solid var(--hairline); font: 700 .72rem/1.5 "Inter", sans-serif; color: var(--muted-text); letter-spacing: .02em; }
 .wl-body { padding: 18px 20px 20px; background: #fff; }
 .wl-body p { font-size: .93rem; line-height: 1.75; color: var(--ink); margin-bottom: .8rem; }
 .wl-body p:last-child { margin-bottom: 0; }
